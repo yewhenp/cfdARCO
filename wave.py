@@ -8,13 +8,13 @@ import matplotlib.animation as animation
 import pygame
 from matplotlib import cm
 import seaborn as sns
-from equation import Variable1d, Variable2d, Equation, d1dx, d2dx, d1dy, d2dy, dt, d2t
+from equation import Variable1d, Variable2d, Equation, d1dx, d2dx, d1dy, d2dy, dt, d2t, laplass
 
 
 counter = 0
 
 def place_raindrops(arr):
-    if random.random()<0.1:
+    if random.random()<0.02:
         sz = 2
         sigma = 1.4
         xx, yy = np.meshgrid(range(-sz, sz), range(-sz, sz))
@@ -32,11 +32,18 @@ def place_raindrops(arr):
         # arr[x-w+dist:x+w+dist, y-h:y+h] += height * gauss_peak
         # arr[x-w:x+w, y-h-dist:y+h-dist] -= height * gauss_peak
 
+ii = 0
+
 def boundary(arr):
+    global ii
+
     arr[0, :] = 0
-    arr[-1, :] = 0
     arr[:, 0] = 0
     arr[:, -1] = 0
+    arr[-1, :] = 0
+    # arr[0:5, :] = np.sin(ii * 0.15) * 20
+
+    ii+=1
     place_raindrops(arr)
 
     # global counter
@@ -82,8 +89,8 @@ def I(x, y):
 
 if __name__ == '__main__':
 
-    Lx = 70
-    Ly = 70
+    Lx = 300
+    Ly = 300
 
     dimx = Lx
     dimy = Ly
@@ -97,75 +104,80 @@ if __name__ == '__main__':
     initial = np.zeros((Lx, Ly))
     velocity = np.zeros((Lx, Ly))
 
-    velocity[0:dimx,0:dimy] = 0.39            # 0.39 m/s Wave velocity of shallow water waves (lambda 0.1, depth 0.1)
+    velocity[:,:] = 0.3            # 0.39 m/s Wave velocity of shallow water waves (lambda 0.1, depth 0.1)
     # velocity[220:300,100:dimy-100] = 0.2      # will be set to a constant value of tau
     # velocity[300:400,100:dimy-100] = 0.1      # will be set to a constant value of tau
     # velocity[0:dimx, 300:] = 0.4     # will be set to a constant value of tau
 
     # compute tau and kappa from the velocity field
     tau = ( velocity*ts )**2
-    kappa = ts * velocity
+    kappa = 0.3
 
     deltas = [1, 1]
     field = Variable2d(initial, boundary, deltas)
 
     eq = (d2dx(field) + d2dy(field)) * tau
+    # tau[0, :] = 1
+    # tau[-1, :] = 1
+    # tau[:, 0] = 1
+    # tau[:, -1] = 1
+    # eq = laplass(field) * tau
 
     equation = Equation(timesteps = timesteps, time_s = time_s)
     history = equation.evaluate([field], [d2t(field)], [eq])[0]
 
 
-    # pygame.init()
-    # display = pygame.display.set_mode((Lx*scale, Ly*scale))
-    # pygame.display.set_caption("Solving the 2d Wave Equation")
-    # pixeldata = np.zeros((Lx, Ly, 3), dtype=np.uint8)
-    #
-    # i = 2
-    #
-    # while True:
-    #     print(i)
-    #     for event in pygame.event.get():
-    #         if event.type == pygame.QUIT:
-    #             pygame.quit()
-    #             break
-    #
-    #     dimx = Lx
-    #     dimy = Ly
-    #     u = np.asarray([history[i+1], history[i], history[i-1]])
-    #     # pixeldata = np.zeros((Lx, Ly, 3), dtype=np.uint8)
-    #     pixeldata[1:dimx, 1:dimy, 0] = 255 - np.clip((u[0, 1:dimx, 1:dimy] > 0) * 10 * u[0, 1:dimx, 1:dimy] + u[1, 1:dimx, 1:dimy] + u[2, 1:dimx, 1:dimy], 0, 255)
-    #     pixeldata[1:dimx, 1:dimy, 1] = 255 - np.clip(np.abs(u[0, 1:dimx, 1:dimy]) * 10, 0, 255)
-    #     pixeldata[1:dimx, 1:dimy, 2] = 255 - np.clip((u[0, 1:dimx, 1:dimy] <= 0) * -10 * u[0, 1:dimx, 1:dimy] + u[1, 1:dimx, 1:dimy] + u[2, 1:dimx, 1:dimy], 0, 255)
-    #
-    #     surf = pygame.surfarray.make_surface(pixeldata)
-    #     display.blit(pygame.transform.scale(surf, (Lx * scale, Ly * scale)), (0, 0))
-    #     pygame.display.update()
-    #
-    #     i+=1
-    #     time.sleep(0.2)
+    pygame.init()
+    display = pygame.display.set_mode((Lx*scale, Ly*scale))
+    pygame.display.set_caption("Solving the 2d Wave Equation")
+    pixeldata = np.zeros((Lx, Ly, 3), dtype=np.uint8)
 
+    i = 2
 
-    X = np.arange(0, Lx, 1)
-    Y = np.arange(0, Ly, 1)
-    X, Y = np.meshgrid(X, Y)
-
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-
-    surf = (ax.plot_surface(X, Y, history[0], cmap=cm.coolwarm, vmin=-1, vmax=1))
-
-    ax.set_title('Wave')
-    fig.colorbar(surf)  # Add a colorbar to the plot
-    ax.set_zlim(-1.01, 1.01)
-
-
-    def animate(i):
+    while True:
         print(i)
-        ax.clear()
-        surf = (ax.plot_surface(X, Y, history[i], cmap=cm.coolwarm, vmin=-1, vmax=1))
-        ax.set_zlim(-1.01, 1.01)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                break
 
-        return surf
+        dimx = Lx
+        dimy = Ly
+        u = np.asarray([history[i+1], history[i], history[i-1]])
+        # pixeldata = np.zeros((Lx, Ly, 3), dtype=np.uint8)
+        pixeldata[1:dimx, 1:dimy, 0] = np.clip((u[0, 1:dimx, 1:dimy]>0) * 20 * u[0, 1:dimx, 1:dimy]+u[1, 1:dimx, 1:dimy]+u[2, 1:dimx, 1:dimy], 0, 255)
+        pixeldata[1:dimx, 1:dimy, 1] = np.clip((u[0, 1:dimx, 1:dimy]>0) * 20 * u[0, 1:dimx, 1:dimy]+u[1, 1:dimx, 1:dimy]+u[2, 1:dimx, 1:dimy], 0, 255)
+        pixeldata[1:dimx, 1:dimy, 2] = np.clip((u[0, 1:dimx, 1:dimy]>0) * 20 * u[0, 1:dimx, 1:dimy]+u[1, 1:dimx, 1:dimy]+u[2, 1:dimx, 1:dimy], 0, 255)
 
-    anim = animation.FuncAnimation(fig, animate, frames=timesteps)
-    plt.show()
+        surf = pygame.surfarray.make_surface(pixeldata)
+        display.blit(pygame.transform.scale(surf, (Lx * scale, Ly * scale)), (0, 0))
+        pygame.display.update()
+
+        i+=1
+        # time.sleep(0.2)
+
+
+    # X = np.arange(0, Lx, 1)
+    # Y = np.arange(0, Ly, 1)
+    # X, Y = np.meshgrid(X, Y)
+    #
+    # fig = plt.figure()
+    # ax = fig.gca(projection='3d')
+    #
+    # surf = (ax.plot_surface(X, Y, history[0], cmap=cm.coolwarm, vmin=-1, vmax=1))
+    #
+    # ax.set_title('Wave')
+    # fig.colorbar(surf)  # Add a colorbar to the plot
+    # ax.set_zlim(-1.01, 1.01)
+    #
+    #
+    # def animate(i):
+    #     print(i)
+    #     ax.clear()
+    #     surf = (ax.plot_surface(X, Y, history[i], cmap=cm.coolwarm, vmin=-1, vmax=1))
+    #     ax.set_zlim(-1.01, 1.01)
+    #
+    #     return surf
+    #
+    # anim = animation.FuncAnimation(fig, animate, frames=timesteps)
+    # plt.show()

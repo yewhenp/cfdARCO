@@ -77,13 +77,24 @@ if __name__ == '__main__':
     rho_0 = 1024.0  # Density of fluid [kg/m^3)]
     tau_0 = 0.1  # Amplitude of wind stress [kg/ms^2]
     k = 0.9
+    y = np.linspace(-Ly / 2, Ly / 2, Ly)
 
-    eq1 = (d1dx(u) + d1dy(v)) * (-H)
-    eq2 = d1dx(h) * (-g) + u*k*(-1) + v*f_0
-    eq3 = d1dy(h) * (-g) + v*k*(-1) + u*f_0*(-1)
+    f = f_0 + beta * y  # Varying coriolis parameter
+    L_R = np.sqrt(g * H) / f_0  # Rossby deformation radius
+    c_R = beta * g * H / f_0 ** 2  # Long Rossby wave speed
+
+    dt_ = time_s / timesteps
+
+    alpha = dt_*f                # Parameter needed for coriolis scheme
+    beta_c = alpha**2/4         # Parameter needed for coriolis scheme
+
+
+    eq1 = (d1dx(h) * (-g) + u*beta_c*(-1) + v*alpha) * (1 / (1+beta_c))
+    eq2 = (d1dx(h) * (-g) + v*beta_c*(-1) + u*alpha*(-1)) * (1 / (1+beta_c))
+    eq3 = (d1dx(u) + d1dy(v)) * (-H)
 
     equation = Equation(timesteps = timesteps, time_s = time_s)
-    history = equation.evaluate([h, u, v], [dt(h), dt(u), dt(v)], [eq1, eq2, eq3])
+    history = equation.evaluate([u, v, h], [dt(u), dt(v), dt(h)], [eq1, eq2, eq3])
 
     X = np.arange(0, Lx, 1)
     Y = np.arange(0, Ly, 1)
@@ -92,7 +103,7 @@ if __name__ == '__main__':
     fig = plt.figure()
     ax = fig.gca(projection='3d')
 
-    surf = (ax.plot_surface(X, Y, history[0][0], cmap=cm.coolwarm, vmin=-1, vmax=1))
+    surf = (ax.plot_surface(X, Y, history[2][0], cmap=cm.coolwarm, vmin=-1, vmax=1))
 
     ax.set_title('Wave')
     fig.colorbar(surf)  # Add a colorbar to the plot
@@ -102,7 +113,7 @@ if __name__ == '__main__':
     def animate(i):
         print(i)
         ax.clear()
-        surf = (ax.plot_surface(X, Y, history[0][i], cmap=cm.coolwarm, vmin=-1, vmax=1))
+        surf = (ax.plot_surface(X, Y, history[2][i], cmap=cm.coolwarm, vmin=-1, vmax=1))
         ax.set_zlim(-1.01, 1.01)
 
         return surf

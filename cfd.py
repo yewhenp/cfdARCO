@@ -54,8 +54,8 @@ if __name__ == '__main__':
 
     ro = 1
 
-    eq1 = u*d1dx(u)*(-1) + v*d1dy(u)*(-1) + d1dx(p)*(-1/ro) + v * (d2dx(u) + d2dy(u))
-    eq2 = u*d1dx(v)*(-1) + v*d1dy(v)*(-1) + d1dy(p)*(-1/ro) + v * (d2dx(v) + d2dy(v))
+    eq1 = u*d1dx(u)*(-1) + v*d1dy(u)*(-1) + d1dx(p)*(-1/ro) + (d2dx(u) + d2dy(u))
+    eq2 = u*d1dx(v)*(-1) + v*d1dy(v)*(-1) + d1dy(p)*(-1/ro) + (d2dx(v) + d2dy(v))
     eq3 = (d1dx(u)*d1dx(u) + d1dy(u)*d1dx(v)*2 + d1dy(v)*d1dy(v)) * (-1/ro)
 
     equation = Equation(timesteps = timesteps, time_s = time_s)
