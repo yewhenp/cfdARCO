@@ -8,8 +8,7 @@ import matplotlib.animation as animation
 import pygame
 from matplotlib import cm
 import seaborn as sns
-from equation import Variable1d, Variable2d, Equation, d1dx, d2dx, d1dy, d2dy, dt, d2t, laplass
-
+from equation import Variable1d, Variable2d, Equation, d1dx, d2dx, d1dy, d2dy, d1t, d2t, laplass, DT
 
 counter = 0
 
@@ -27,10 +26,6 @@ def place_raindrops(arr):
 
         height = 0.01
         arr[x:x+w, y:y+h] += gauss_peak * height
-        # arr[x-w-dist:x+w-dist, y-h:y+h] += height * gauss_peak
-        # arr[x-w:x+w, y-h+dist:y+h+dist] -= height * gauss_peak
-        # arr[x-w+dist:x+w+dist, y-h:y+h] += height * gauss_peak
-        # arr[x-w:x+w, y-h-dist:y+h-dist] -= height * gauss_peak
 
 ii = 0
 
@@ -46,49 +41,11 @@ def boundary(arr):
     ii+=1
     place_raindrops(arr)
 
-    # global counter
-    # if counter < 10:
-    #     if counter > 5:
-    #         print("here")
-    #         arr[30, 30] = 1
-    #     counter += 1
 
     return arr
 
 
-# def bound_2(arr):
-#     c = dimx - 1
-#     sz = 1
-#     arr_n = np.zeros_like(arr)
-#     arr_n[dimx - sz - 1:c, 1:dimy - 1] = arr[dimx - sz - 2:c - 1, 1:dimy - 1] + (
-#                 kappa[dimx - sz - 1:c, 1:dimy - 1] - 1) / (kappa[dimx - sz - 1:c, 1:dimy - 1] + 1) * (
-#                                                     arr[dimx - sz - 2:c - 1, 1:dimy - 1] - arr[dimx - sz - 1:c,
-#                                                                                             1:dimy - 1])
-#
-#     c = 0
-#     arr_n[c:sz, 1:dimy - 1] = arr[c + 1:sz + 1, 1:dimy - 1] + (kappa[c:sz, 1:dimy - 1] - 1) / (
-#                 kappa[c:sz, 1:dimy - 1] + 1) * (arr[c + 1:sz + 1, 1:dimy - 1] - arr[c:sz, 1:dimy - 1])
-#
-#     r = dimy - 1
-#     arr_n[1:dimx - 1, dimy - 1 - sz:r] = arr[1:dimx - 1, dimy - 2 - sz:r - 1] + (
-#                 kappa[1:dimx - 1, dimy - 1 - sz:r] - 1) / (kappa[1:dimx - 1, dimy - 1 - sz:r] + 1) * (
-#                                                     arr[1:dimx - 1, dimy - 2 - sz:r - 1] - arr[1:dimx - 1,
-#                                                                                             dimy - 1 - sz:r])
-#
-#     r = 0
-#     arr_n[1:dimx - 1, r:sz] = arr[1:dimx - 1, r + 1:sz + 1] + (kappa[1:dimx - 1, r:sz] - 1) / (
-#                 kappa[1:dimx - 1, r:sz] + 1) * (arr[1:dimx - 1, r + 1:sz + 1] - arr[1:dimx - 1, r:sz])
-#
-#     return arr_n
-
-
-def I(x, y):
-    """Gaussian peak at (Lx/2, Ly/2)."""
-    return np.exp(-0.5*(x-Lx/2.0)**2 - 0.5*(y-Ly/2.0)**2)
-
-
 if __name__ == '__main__':
-
     Lx = 300
     Ly = 300
 
@@ -105,9 +62,6 @@ if __name__ == '__main__':
     velocity = np.zeros((Lx, Ly))
 
     velocity[:,:] = 0.3            # 0.39 m/s Wave velocity of shallow water waves (lambda 0.1, depth 0.1)
-    # velocity[220:300,100:dimy-100] = 0.2      # will be set to a constant value of tau
-    # velocity[300:400,100:dimy-100] = 0.1      # will be set to a constant value of tau
-    # velocity[0:dimx, 300:] = 0.4     # will be set to a constant value of tau
 
     # compute tau and kappa from the velocity field
     tau = ( velocity*ts )**2
@@ -115,16 +69,14 @@ if __name__ == '__main__':
 
     deltas = [1, 1]
     field = Variable2d(initial, boundary, deltas)
+    dt_var = DT(update_fn=DT.UpdatePolicies.constant_value, timesteps=timesteps, time_s=time_s)
 
-    eq = (d2dx(field) + d2dy(field)) * tau
-    # tau[0, :] = 1
-    # tau[-1, :] = 1
-    # tau[:, 0] = 1
-    # tau[:, -1] = 1
-    # eq = laplass(field) * tau
+    equation_system = [
+        [d2t(field), "=", (d2dx(field) + d2dy(field)) * tau],
+    ]
 
-    equation = Equation(timesteps = timesteps, time_s = time_s)
-    history = equation.evaluate([field], [d2t(field)], [eq])[0]
+    equation = Equation(timesteps = timesteps)
+    history = equation.evaluate([field], equation_system, dt_var)[0]
 
 
     pygame.init()

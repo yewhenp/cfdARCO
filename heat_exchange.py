@@ -2,19 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import seaborn as sns
-from equation import Variable1d, Variable2d, Equation, d1dx, d2dx, d1dy, d2dy, dt
+from equation import Variable2d, Equation, d2dx, d2dy, d1t, DT
 
 
-
-def boundary_1(arr):
-    arr[0, :] = 0
-    arr[-1, :] = -100
-    arr[:, 0] = -50
-    arr[:, -1] = 0
-    return arr
-
-
-def boundary_2(arr):
+def boundary(arr):
     arr[10:20, 10:20] = -50
     arr[30:55, 30:55] = 100
     arr[0, :] = 0
@@ -25,16 +16,19 @@ def boundary_2(arr):
 
 
 if __name__ == '__main__':
-    initial = np.zeros((100, 100))
-    boundary_conditions = boundary_2
     deltas = [1, 1]
-    field = Variable2d(initial, boundary_conditions, deltas)
-
+    timesteps = 10000
+    time_s = 500
     k = 5
-    eq_formula = (d2dx(field) + d2dy(field)) * k
+    field = Variable2d(np.zeros((100, 100)), boundary, deltas)
+    dt_var = DT(update_fn=DT.UpdatePolicies.constant_value, timesteps=timesteps, time_s=time_s)
 
-    equation = Equation(timesteps = 10000, time_s = 500)
-    history = equation.evaluate([field], [dt(field)], [eq_formula])[0]
+    equation_system = [
+        [d1t(field), "=", (d2dx(field) + d2dy(field)) * k],
+    ]
+
+    equation = Equation(timesteps = timesteps)
+    history = equation.evaluate([field], equation_system, dt_var)[0]
 
     fig, ax = plt.subplots()
     sns.heatmap(history[0], vmax=100, vmin=-100, cmap="crest")
@@ -45,7 +39,7 @@ if __name__ == '__main__':
 
     def animate(i):
         print(i)
-        data = history[10 * i]
+        data = history[3*i]
         sns.heatmap(data, vmax=100, vmin=-100, square=True, cbar=False, cmap=sns.color_palette("vlag", as_cmap=True))
 
 

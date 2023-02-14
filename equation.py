@@ -9,22 +9,41 @@ class Variable:
         if initial is not None:
             self.current = initial.copy()
             self.boundary_conditions = boundary_conditions
-            # self.current = self.boundary_conditions(self.current)
             self.deltas = deltas
             self.history = []
-            # self.current = self.boundary_conditions(self.current)
 
     def set_bound(self):
         self.current = self.boundary_conditions(self.current)
+
+    def add_history(self):
+        self.history.append(self.current.copy())
 
     def __repr__(self):
         return self.name
 
     def __add__(self, other):
-        return _SubVariable(self, other, operator.add, "add")
+        return _SubVariable(self, other, lambda x, y: x + y, "add")
+
+    def __radd__(self, other):
+        return _SubVariable(self, other, lambda x, y: y + x, "add")
+
+    def __sub__(self, other):
+        return _SubVariable(self, other, lambda x, y: x - y, "add")
+
+    def __neg__(self):
+        return _SubVariable(self, -1, lambda x, y: x * y, "neg")
+
+    def __rsub__(self, other):
+        return _SubVariable(self, other, lambda x, y: y - x, "add")
 
     def __mul__(self, other):
-        return _SubVariable(self, other, operator.mul, "mul")
+        return _SubVariable(self, other, lambda x, y: x * y, "mul")
+
+    def __rmul__(self, other):
+        return _SubVariable(self, other, lambda x, y: y * x, "mul")
+
+    def __truediv__(self, other):
+        return _SubVariable(self, other, lambda x, y: x / y, "rdiv")
 
     def __rtruediv__(self, other):
         return _SubVariable(self, other, lambda x, y: y / x, "rdiv")
@@ -41,14 +60,7 @@ class Variable:
     def evaluate(self, **kwargs):
         return self.current.copy()
 
-    # def dt(self, current, dt):
-    #     self.current = ((dt * current) + self.current).copy()
-    #     self.current = self.boundary_conditions(self.current)
-    #     self.history.append(self.current.copy())
-
     def set_current(self, current, **kwargs):
-        # if kwargs["set_boundaries"]:
-        #     current = self.boundary_conditions(current)
         self.current = current
         if kwargs["set_boundaries"]:
             self.history.append(self.current.copy())
@@ -59,20 +71,49 @@ class Variable:
     def get_delta(self, **kwargs):
         return self.deltas[0]
 
+    def get_deltas(self):
+        return self.deltas
+
     def get_shift_first_order(self, **kwargs):
         return self.current
 
     def get_shift_second_order(self, **kwargs):
         return self.current, self.current
 
+    def solve(self, **kwargs):
+        return Equation.EqSolver.solve_dt(equation=kwargs["equation"], time_var=self, set_var=self, dt=kwargs["dt"])
 
-class DTVar(Variable):
-    def __init__(self):
+
+class DT(Variable):
+    class UpdatePolicies:
+        @staticmethod
+        def constant_value(timesteps, time_s, **kwargs):
+            return time_s / timesteps
+
+        @staticmethod
+        def CourantFriedrichsLewy(CFL, space_vars, deltas, **kwargs):
+            with np.errstate(divide='ignore'):
+                dt = CFL / np.sum([np.amax(space_vars[0].current) / deltas[0], np.amax(space_vars[1].current) / deltas[1]])
+            if np.isinf(dt):
+                dt = CFL * np.sum(deltas)
+            return dt
+
+    def __init__(self, update_fn=UpdatePolicies.constant_value, **params):
         super().__init__(None, None, None)
         self.name = "dt"
+        self._dt = 0
+        self.update_fn = update_fn
+        self.params = params
 
     def evaluate(self, **kwargs):
         return kwargs["dt"]
+
+    def update(self, **kwargs):
+        self._dt = self.update_fn(**{**self.params, **kwargs})
+
+    @property
+    def dt(self):
+        return self._dt
 
 
 class Variable1d(Variable):
@@ -92,7 +133,6 @@ class Variable1d(Variable):
     def get_shift_first_order(self, **kwargs):
         ret = np.zeros_like(self.current)
         ret[1:] = self.current[1:]
-        # ret = self.boundary_conditions(ret)
         return ret
 
     def get_shift_second_order(self, **kwargs):
@@ -100,8 +140,6 @@ class Variable1d(Variable):
         ret1[2:] = self.current[2:]
         ret2 = np.zeros_like(self.current)
         ret2[:-2] = self.current[:-2]
-        # ret1 = self.boundary_conditions(ret1)
-        # ret2 = self.boundary_conditions(ret2)
         return ret1, ret2
 
 
@@ -111,10 +149,8 @@ class Variable2d(Variable):
         arr_value = np.zeros_like(self.current)
         if kwargs["direction"] == "y":
             arr_value[1:-1, 1:-1] = (self.current[2:, 1:-1] - self.current[:-2, 1:-1]) / (2*self.deltas[0])
-            # arr_value[1:, :] = (arr_value[1:, :] - arr_value[:-1, :]) / (2*self.deltas[0])
         if kwargs["direction"] == "x":
             arr_value[1:-1, 1:-1] = (self.current[1:-1, 2:] - self.current[1:-1, :-2]) / (2*self.deltas[1])
-            # arr_value[:, 1:] = (arr_value[:, 1:] - arr_value[:, :-1]) / (2*self.deltas[1])
         return arr_value
 
     def evaluate_second_order(self, **kwargs):
@@ -122,10 +158,8 @@ class Variable2d(Variable):
         arr_value = np.zeros_like(self.current)
         if kwargs["direction"] == "y":
             arr_value[1:-1, 1:-1] = (self.current[2:, 1:-1] - 2*self.current[1:-1, 1:-1] + self.current[:-2, 1:-1]) / (self.deltas[0] ** 2)
-            # arr_value[1:-1, 1:-1] = (arr_value[2:, 1:-1] - 2*arr_value[1:-1, 1:-1] + arr_value[:-2, 1:-1]) / (self.deltas[0] ** 2)
         if kwargs["direction"] == "x":
             arr_value[1:-1, 1:-1] = (self.current[1:-1, 2:] - 2*self.current[1:-1, 1:-1] + self.current[1:-1, :-2]) / (self.deltas[1] ** 2)
-            # arr_value[1:-1, 1:-1] = (arr_value[1:-1, 2:] - 2*arr_value[1:-1, 1:-1] + arr_value[1:-1, :-2]) / (self.deltas[1] ** 2)
         return arr_value
 
     def get_delta(self, **kwargs):
@@ -141,7 +175,6 @@ class Variable2d(Variable):
         if kwargs["direction"] == "y":
             ret = np.zeros_like(self.current)
             ret[:, 1:] = self.current[:, 1:]
-        # ret = self.boundary_conditions(ret)
         return ret
 
     def get_shift_second_order(self, **kwargs):
@@ -155,8 +188,6 @@ class Variable2d(Variable):
             ret1[:, 2:] = self.current[:, 2:]
             ret2 = np.zeros_like(self.current)
             ret2[:, :-2] = self.current[:, :-2]
-        # ret1 = self.boundary_conditions(ret1)
-        # ret2 = self.boundary_conditions(ret2)
         return ret1, ret2
 
 
@@ -179,25 +210,6 @@ class _SubVariable(Variable):
             right_eval = self.right_operand
         return self.op(left_eval, right_eval)
 
-    def extract(self, left_part, **kwargs):
-        if self.name == "add":
-            if isinstance(self.left_operand, _SubVariableSecondOrder) and isinstance(self.right_operand, _SubVariableSecondOrder):
-                # ret1_l, ret2_l = self.left_operand.get_shift_second_order()
-                # ret1_r, ret2_r = self.right_operand.get_shift_second_order()
-                delta_l = self.left_operand.get_delta()
-                delta_r = self.right_operand.get_delta()
-                # p2_xy = (ret2_l + ret2_l) / (delta_l**2) + (ret2_r + ret2_r) / (delta_r**2)
-                p_old = self.left_operand.var.current.copy()
-                p2_xy_ = (p_old[2:, 1:-1] + p_old[:-2, 1:-1]) / delta_l ** 2 + (p_old[1:-1, 2:] + p_old[1:-1, :-2]) / delta_r ** 2
-                p2_xy = np.zeros_like(p_old)
-                p2_xy[1:-1, 1:-1] = p2_xy_
-                factor = 1 / (2 / delta_l ** 2 + 2 / delta_r ** 2)
-                return p2_xy * factor - (factor / kwargs["dt"]) * left_part
-                # return (left_part * (delta_l**2) * (delta_r**2) - delta_r*(ret1_l + ret2_l) - delta_l*(ret1_r + ret2_r)) / (-2*delta_l -2*delta_r)
-                # return (left_part - 0.5*((ret1_l + ret2_l) / (delta_l**2) + (ret1_r + ret2_r) / (delta_r**2))) * (delta_l**2 * delta_r**2) / (2 * (delta_r + delta_l))
-                # return (left_part - 0.5 * (ret1_l + ret2_l + ret1_r + ret2_r))  / 2
-        raise NotImplementedError
-
 
 class _SubVariableFirstOrder(Variable):
     def __init__(self, var, direction):
@@ -207,9 +219,6 @@ class _SubVariableFirstOrder(Variable):
 
     def evaluate(self, **kwargs):
         return self.var.evaluate_first_order(direction=self.direction)
-
-    # def dt(self, current, dt):
-    #     return self.var.dt(current, dt)
 
     def extract(self, left_part, **kwargs):
         return -(left_part * self.var.get_delta(direction=self.direction) - self.var.get_shift_first_order(direction=self.direction))
@@ -236,9 +245,6 @@ class _SubVariableSecondOrder(Variable):
     def evaluate(self, **kwargs):
         return self.var.evaluate_second_order(direction=self.direction)
 
-    # def dt(self, current, dt):
-    #     return self.var.dt(current, dt)
-
     def extract(self, left_part, **kwargs):
         ret1, ret2 = self.var.get_shift_second_order(direction=self.direction)
         return -(left_part * self.var.get_delta(direction=self.direction)**2 - ret1 - ret2) / 2
@@ -256,32 +262,6 @@ class _SubVariableSecondOrder(Variable):
         self.var.set_current(current, **kwargs)
 
 
-# class _SubVariableFourthOrder(Variable):
-#     def __init__(self, var, direction):
-#         super().__init__(None, None, None)
-#         self.var = var
-#         self.direction = direction
-#
-#     def evaluate(self):
-#         return self.var.evaluate_second_order(direction=self.direction)
-#
-#     # def extract(self, left_part, **kwargs):
-#     #     ret1, ret2 = self.var.get_shift_second_order(direction=self.direction)
-#     #     return -(left_part * self.var.get_delta(direction=self.direction)**2 - ret1 - ret2) / 2
-#
-#     def get_shift_second_order(self):
-#         return self.var.get_shift_second_order(direction=self.direction)
-#
-#     def get_history(self):
-#         return self.var.get_history()
-#
-#     def get_delta(self, **kwargs):
-#         return self.var.get_delta(direction=self.direction)
-#
-#     def set_current(self, current):
-#         self.var.set_current(current)
-
-
 class _DT(Variable):
     def __init__(self, var):
         super().__init__(None, None, None)
@@ -292,6 +272,9 @@ class _DT(Variable):
 
     def set_current(self, current, **kwargs):
         self.var.set_current(current, **kwargs)
+
+    def solve(self, **kwargs):
+        return Equation.EqSolver.solve_dt(equation=kwargs["equation"], time_var=self, set_var=self.var, dt=kwargs["dt"])
 
 class _D2T(Variable):
     def __init__(self, var):
@@ -310,6 +293,9 @@ class _D2T(Variable):
     def set_current(self, current, **kwargs):
         self.var.set_current(current, **kwargs)
 
+    def solve(self, **kwargs):
+        return Equation.EqSolver.solve_dt(equation=kwargs["equation"], time_var=self, set_var=self.var, dt=kwargs["dt"])
+
 
 class _Laplass(Variable):
     def __init__(self, var):
@@ -325,6 +311,18 @@ class _Laplass(Variable):
         ret[1:-1, 1:-1] = aaa
         return ret
 
+    def extract(self, left_part, **kwargs):
+        deltas = self.var.get_deltas()
+        var_old = self.var.current.copy()
+        var_xy_ = (var_old[2:, 1:-1] + var_old[:-2, 1:-1]) * deltas[0] ** 2 + (var_old[1:-1, 2:] + var_old[1:-1, :-2]) * deltas[1] ** 2
+        var_xy = np.zeros_like(var_old)
+        var_xy[1:-1, 1:-1] = var_xy_
+        left_part_xy = left_part * deltas[0] ** 2 * deltas[1] ** 2
+        return (var_xy + left_part_xy) / (2 * (deltas[0] ** 2 + deltas[1] ** 2))
+
+    def solve(self, **kwargs):
+        return Equation.EqSolver.solve_iteratively(equation=kwargs["equation"], time_var=self, set_var=self.var, dt=kwargs["dt"])
+
 
 def d1dx(var):
     return _SubVariableFirstOrder(var, direction="x")
@@ -338,7 +336,7 @@ def d2dx(var):
 def d2dy(var):
     return _SubVariableSecondOrder(var, direction="y")
 
-def dt(var):
+def d1t(var):
     return _DT(var)
 
 def d2t(var):
@@ -348,49 +346,47 @@ def laplass(var):
     return _Laplass(var)
 
 class Equation:
-    def __init__(self, timesteps = 200, time_s = 2):
-        self.dt = time_s / timesteps
-        self.timesteps = timesteps
-        self.time_s = time_s
+    class EqSolver:
+        @staticmethod
+        def solve_dt(equation, time_var, set_var, dt: DT):
+            current = equation.evaluate()
+            extracted = time_var.extract(current, dt=dt.dt)
+            set_var.set_current(extracted, set_boundaries=0)
 
-    def evaluate(self, all_vars, time_vars, equations):
+        @staticmethod
+        def solve_iteratively(equation, time_var, set_var, dt: DT):
+            error = 1
+            tol = 1e-3
+            qq = 0
+
+            while error > tol:
+                qq += 1
+                old_val = set_var.current.copy()
+                current = equation.evaluate(dt=dt.dt)
+                extracted = time_var.extract(current, dt=dt.dt)
+                error = np.amax(abs(extracted - old_val))
+                set_var.set_current(extracted, set_boundaries=0)
+                set_var.set_bound()
+
+                if qq > 500:
+                    tol *= 10
+
+    def __init__(self, timesteps):
+        self.timesteps = timesteps
+
+    def evaluate(self, all_vars, equation_system, dt: DT):
         for t in tqdm.trange(self.timesteps):
-            print()
-            CFL = 0.8
-            with np.errstate(divide='ignore'):
-                dt = CFL / np.sum([np.amax(all_vars[-2].current) / all_vars[0].deltas[0], np.amax(all_vars[-1].current) / all_vars[1].deltas[1]])
-            # Escape condition if dt is infinity due to zero velocity initially
-            if np.isinf(dt):
-                dt = CFL * (all_vars[0].deltas[0] + all_vars[1].deltas[1])
-            self.dt = dt
+            dt.update()
 
             for i in range(len(all_vars)):
                 all_vars[i].set_bound()
 
-            for i in range(len(equations)):
-                if i == 4:
-                    error = 1
-                    tol = 1e-3
-                    qq = 0
+            for equation in equation_system:
+                left_part, _, right_part = equation
+                left_part.solve(equation=right_part, dt=dt)
 
-                    while error > tol:
-                        qq += 1
-                        old_val = all_vars[i].current.copy()
-                        current = equations[i].evaluate(dt=self.dt)
-                        extracted = time_vars[i].extract(current, dt=self.dt)
-                        error = np.amax(abs(extracted - old_val))
-                        all_vars[i].set_current(extracted, set_boundaries=1)
-                        all_vars[i].set_bound()
-
-                        print(f"error = {error}")
-
-                        if qq > 500:
-                            tol *= 10
-                    print("wert")
-                else:
-                    current = equations[i].evaluate()
-                    extracted = time_vars[i].extract(current, dt=self.dt)
-                    all_vars[i].set_current(extracted, set_boundaries=1)
+            for i in range(len(all_vars)):
+                all_vars[i].add_history()
 
         return [varr.get_history() for varr in all_vars]
 
