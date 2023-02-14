@@ -14,7 +14,7 @@ from equation import Variable1d, Variable2d, Equation, d1dx, d2dx, d1dy, d2dy, d
 counter = 0
 
 def place_raindrops(arr):
-    if random.random()<0.02:
+    if random.random()<0.002:
         sz = 2
         sigma = 1.4
         xx, yy = np.meshgrid(range(-sz, sz), range(-sz, sz))
@@ -96,8 +96,8 @@ if __name__ == '__main__':
     dimy = Ly
 
     scale = 2
-    timesteps = 1000
-    time_s = 1000
+    timesteps = 10000
+    time_s = 10000
 
     ts = time_s / timesteps
 
