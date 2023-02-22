@@ -176,32 +176,25 @@ class _Laplass(Variable):
 
         for i in range(self.var.mesh.num_nodes):
             node = self.var.mesh.nodes[i]
-            summ = 0.0
             if not node.is_boundary():
+                summ = 0.0
                 qq = 0
                 for edge_id in node.edges_id:
                     edge = self.var.mesh.edged[edge_id]
                     n1 = self.var.mesh.nodes[edge.nodes_id[0]]
                     n2 = self.var.mesh.nodes[edge.nodes_id[1]]
+                    if n1.id != node.id:
+                        n1, n2 = n2, n1
 
-                    fi = (self.var.current[n1.id] + self.var.current[n2.id]) / 2
+                    fi = (self.var.current[n1.id] - self.var.current[n2.id]) / 2
 
                     norm = edge.normal
-                    if qq == 0 and np.any(norm) < 0:
-                        norm *= -1
-                    if qq == 1 and np.any(norm) > 0:
-                        norm *= -1
-                    if qq == 2 and np.any(norm) > 0:
-                        norm *= -1
-                    if qq == 3 and np.any(norm) < 0:
-                        norm *= -1
-
                     flux = np.sum(fi * norm * edge.area)
                     summ += flux
                     qq += 1
 
-            summ /= node.volume
-            ret[i] = summ
+                summ /= node.volume
+                ret[i] = summ
 
         return ret
 

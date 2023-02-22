@@ -274,6 +274,18 @@ class Quadrangle2DMesh:
 
 
 if __name__ == '__main__':
-    mesh = Quadrangle2DMesh(3, 3, 3, 3)
+    mesh = Quadrangle2DMesh(20, 20, 20, 20)
     mesh.compute()
     mesh.visualize()
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    data = np.zeros((mesh.x, mesh.y))
+    for node in mesh.nodes:
+        if node.is_boundary():
+            data[int(node.center_coords[0]), int(node.center_coords[1])] = 99
+        else:
+            data[int(node.center_coords[0]), int(node.center_coords[1])] = -99
+    sns.heatmap(data, vmax=100, vmin=-100, cmap="crest")
+    plt.show()
