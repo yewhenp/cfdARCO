@@ -112,6 +112,24 @@ class Quadrangle2DMesh:
     def coord_fo_idx(self, x, y):
         return x * self.x + y
 
+    def idx_to_coord(self, idx):
+        return idx // self.x, idx % self.x
+
+    def get_meshgrid(self):
+        x, y = np.linspace(0, self.lx, self.x + 1), np.linspace(0, self.ly, self.y + 1)
+        yv, xv = np.meshgrid(x, y)
+        for node in self.nodes:
+            node_y, node_x = self.idx_to_coord(node.id)
+            xv[node_x, node_y] = self.vertexes[node.vertexes_id[0]].coords[0]
+            yv[node_x, node_y] = self.vertexes[node.vertexes_id[0]].coords[1]
+            xv[node_x, node_y + 1] = self.vertexes[node.vertexes_id[1]].coords[0]
+            yv[node_x, node_y + 1] = self.vertexes[node.vertexes_id[1]].coords[1]
+            xv[node_x + 1, node_y + 1] = self.vertexes[node.vertexes_id[2]].coords[0]
+            yv[node_x + 1, node_y + 1] = self.vertexes[node.vertexes_id[2]].coords[1]
+            xv[node_x + 1, node_y] = self.vertexes[node.vertexes_id[3]].coords[0]
+            yv[node_x + 1, node_y] = self.vertexes[node.vertexes_id[3]].coords[1]
+        return yv, xv
+
     def _init_internals(self):
         for x_ in range(self.x):
             for y_ in range(self.y):
@@ -221,8 +239,6 @@ class Quadrangle2DMesh:
                     print(self.edged[3].nodes_id)
                     print("Noooo")
 
-
-
     def visualize(self):
         import networkx as nx
         import matplotlib.pyplot as plt
@@ -274,18 +290,33 @@ class Quadrangle2DMesh:
 
 
 if __name__ == '__main__':
-    mesh = Quadrangle2DMesh(20, 20, 20, 20)
+    nX = 60
+    nY = 60
+    lX = 60
+    lY = 60
+    mesh = Quadrangle2DMesh(nX, nY, lX, lY)
+    last_dist = 2
+    for x in range(nX):
+        node_id = mesh.coord_fo_idx(x, 0)
+        vrtx_id = mesh.vertexes[mesh.nodes[node_id].vertexes_id[1]].id
+        mesh.vertexes[vrtx_id].coords[1] += (x + 1) * last_dist
+        for y in range(nY):
+            node_id = mesh.coord_fo_idx(x, y)
+            vrtx_id = mesh.vertexes[mesh.nodes[node_id].vertexes_id[2]].id
+            mesh.vertexes[vrtx_id].coords[1] += (x+1) * last_dist
+            last_dist -= (1 / (nX + nY)) / (x+1)
+
     mesh.compute()
     mesh.visualize()
 
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    data = np.zeros((mesh.x, mesh.y))
-    for node in mesh.nodes:
-        if node.is_boundary():
-            data[int(node.center_coords[0]), int(node.center_coords[1])] = 99
-        else:
-            data[int(node.center_coords[0]), int(node.center_coords[1])] = -99
-    sns.heatmap(data, vmax=100, vmin=-100, cmap="crest")
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # import seaborn as sns
+    #
+    # data = np.zeros((mesh.x, mesh.y))
+    # for node in mesh.nodes:
+    #     if node.is_boundary():
+    #         data[int(node.center_coords[0]), int(node.center_coords[1])] = 99
+    #     else:
+    #         data[int(node.center_coords[0]), int(node.center_coords[1])] = -99
+    # sns.heatmap(data, vmax=100, vmin=-100, cmap="crest")
+    # plt.show()

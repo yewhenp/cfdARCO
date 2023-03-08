@@ -12,8 +12,8 @@ def boundary_u(arr):
     return arr
 
 def boundary_v(arr):
-    arr[:, 0] = - arr[:, 1]
-    arr[:, -1] = - arr[:, -2]
+    arr[:, 0] = 0
+    arr[:, -1] = 0
     arr[-1, :] = 0
     arr[0, :] = 0
     return arr
@@ -30,9 +30,9 @@ def boundary_none(arr):
 
 
 if __name__ == '__main__':
-    deltas = [1/10, 1/10]
-    Lx = 11
-    Ly = 11
+    deltas = [1, 1]
+    Lx = 10
+    Ly = 10
     timesteps = 100
     CFL = 0.8
     rho = 1

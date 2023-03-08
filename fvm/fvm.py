@@ -77,11 +77,11 @@ class DT(Variable):
             return time_s / timesteps
 
         @staticmethod
-        def CourantFriedrichsLewy(CFL, space_vars, deltas, **kwargs):
+        def CourantFriedrichsLewy(CFL, space_vars, **kwargs):
             with np.errstate(divide='ignore'):
-                dt = CFL / np.sum([np.amax(space_vars[0].current) / deltas[0], np.amax(space_vars[1].current) / deltas[1]])
+                dt = CFL / np.sum([np.amax(space_vars[0].current) / 1, np.amax(space_vars[1].current) / 1])
             if np.isinf(dt):
-                dt = CFL * np.sum(deltas)
+                dt = CFL * 2
             return dt
 
     def __init__(self, update_fn=UpdatePolicies.constant_value, **params):
@@ -177,8 +177,24 @@ class _Laplass(Variable):
         for i in range(self.var.mesh.num_nodes):
             node = self.var.mesh.nodes[i]
             if not node.is_boundary():
+                # nabla_TF = 0.0
+                # for edge_id in node.edges_id:
+                #     edge = self.var.mesh.edged[edge_id]
+                #     n1 = self.var.mesh.nodes[edge.nodes_id[0]]
+                #     n2 = self.var.mesh.nodes[edge.nodes_id[1]]
+                #     if n1.id != node.id:
+                #         n1, n2 = n2, n1
+                #     Cf = edge.center_coords - n1.center_coords
+                #     fF = n2.center_coords - edge.center_coords
+                #     Cf_n = np.sqrt(np.sum((Cf) ** 2))
+                #     fF_n = np.sqrt(np.sum((fF) ** 2))
+                #     g = Cf_n / (Cf_n + fF_n)
+                #     val = g*self.var.current[n1.id] + (1-g)*self.var.current[n2.id]
+                #     nabla_TF += val * edge.area
+                #
+                # nabla_TF /= node.volume
+
                 summ = 0.0
-                qq = 0
                 for edge_id in node.edges_id:
                     edge = self.var.mesh.edged[edge_id]
                     n1 = self.var.mesh.nodes[edge.nodes_id[0]]
@@ -186,24 +202,102 @@ class _Laplass(Variable):
                     if n1.id != node.id:
                         n1, n2 = n2, n1
 
-                    fi = (self.var.current[n1.id] - self.var.current[n2.id]) / 2
+                    FC_v = n2.center_coords - n1.center_coords
+                    dist_between_nodes = np.sqrt(np.sum((FC_v) ** 2))
+                    FC_v_e = FC_v / dist_between_nodes
 
-                    norm = edge.normal
-                    flux = np.sum(fi * norm * edge.area)
+                    fi = (self.var.current[n1.id] - self.var.current[n2.id]) / dist_between_nodes
+                    Sf = edge.normal * edge.area  # https://habr.com/ru/post/276193/
+                    Ef = (FC_v_e * Sf) * FC_v_e
+                    ort_term = fi * Ef
+
+                    # Tf = Sf - Ef
+                    # Cf = edge.center_coords - n1.center_coords
+                    # fF = n2.center_coords - edge.center_coords
+                    # Cf_n = np.sqrt(np.sum((Cf) ** 2))
+                    # fF_n = np.sqrt(np.sum((fF) ** 2))
+                    # g = Cf_n / (Cf_n + fF_n)
+                    #
+                    # nabla_TC = 0.0
+                    # for edge_id_ in self.var.mesh.nodes[n2.id].edges_id:
+                    #     edge_ = self.var.mesh.edged[edge_id_]
+                    #     n1_ = self.var.mesh.nodes[edge_.nodes_id[0]]
+                    #     if len(edge_.nodes_id) > 1:
+                    #         n2_ = self.var.mesh.nodes[edge_.nodes_id[1]]
+                    #     else:
+                    #         n2_ = self.var.mesh.nodes[edge_.nodes_id[0]]
+                    #
+                    #     if n1_.id != n2:
+                    #         n1_, n2_ = n2_, n1_
+                    #     Cf_ = edge_.center_coords - n1_.center_coords
+                    #     fF_ = n2_.center_coords - edge_.center_coords
+                    #     Cf_n_ = np.sqrt(np.sum((Cf_) ** 2))
+                    #     fF_n_ = np.sqrt(np.sum((fF_) ** 2))
+                    #     g_ = Cf_n_ / (Cf_n_ + fF_n_)
+                    #     val_ = g_ * self.var.current[n1_.id] + (1 - g_) * self.var.current[n2_.id]
+                    #     nabla_TC += val_ * edge_.area
+                    #
+                    # nabla_TC /= self.var.mesh.nodes[n2.id].volume
+                    #
+                    # nabla_Tf = g*nabla_TC + (1-g)*nabla_TF
+                    # cross_dif_term = nabla_Tf * Tf
+
+                    # flux = np.sum(ort_term + cross_dif_term)
+                    flux = np.sum(ort_term)
                     summ += flux
-                    qq += 1
 
                 summ /= node.volume
                 ret[i] = summ
 
         return ret
 
+    def extract(self, left_part, **kwargs):
+        deltas = self.var.get_deltas()
+        var_old = self.var.current.copy()
+        var_xy_ = (var_old[2:, 1:-1] + var_old[:-2, 1:-1]) * deltas[0] ** 2 + (var_old[1:-1, 2:] + var_old[1:-1, :-2]) * deltas[1] ** 2
+        var_xy = np.zeros_like(var_old)
+        var_xy[1:-1, 1:-1] = var_xy_
+        left_part_xy = left_part * deltas[0] ** 2 * deltas[1] ** 2
+        return (var_xy + left_part_xy) / (2 * (deltas[0] ** 2 + deltas[1] ** 2))
 
-def d2dx(var):
-    return _SubVariableSecondOrder(var, direction="x")
 
-def d2dy(var):
-    return _SubVariableSecondOrder(var, direction="y")
+class _Grad(Variable):
+    def __init__(self, var, clc_x=1, clc_y=1):
+        super().__init__(None, None, None)
+        self.var = var
+        self.clc_x = clc_x
+        self.clc_y = clc_y
+        self.clc = np.asarray([clc_x, clc_y])
+
+    def set_current(self, current, **kwargs):
+        self.var.set_current(current, **kwargs)
+
+    def evaluate(self, **kwargs):
+        ret = np.zeros_like(self.var.current)
+
+        for i in range(self.var.mesh.num_nodes):
+            node = self.var.mesh.nodes[i]
+            if not node.is_boundary():
+                summ = 0.0
+                for edge_id in node.edges_id:
+                    edge = self.var.mesh.edged[edge_id]
+                    n1 = self.var.mesh.nodes[edge.nodes_id[0]]
+                    n2 = self.var.mesh.nodes[edge.nodes_id[1]]
+                    if n1.id != node.id:
+                        n1, n2 = n2, n1
+
+                    # dist_between_nodes = np.sqrt(np.sum((n1.center_coords - n2.center_coords) ** 2))
+                    fi = (self.var.current[n1.id] + self.var.current[n2.id]) / 2
+
+                    norm = edge.normal * self.clc
+                    flux = np.sum(fi * norm * edge.area)
+                    summ += flux
+
+                summ /= node.volume
+                ret[i] = summ
+
+        return ret
+
 
 def d1t(var):
     return _DT(var)
@@ -213,11 +307,21 @@ def laplass(var):
     return _Laplass(var)
 
 
+def d1dx(var):
+    return _Grad(var, clc_x=1, clc_y=0)
+
+def d1dy(var):
+    return _Grad(var, clc_x=0, clc_y=1)
+
+def grad(var):
+    return _Grad(var, clc_x=1, clc_y=1)
+
+
 class Equation:
     class EqSolver:
         @staticmethod
         def solve_dt(equation, time_var, set_var, dt: DT):
-            current = equation.evaluate()
+            current = equation.evaluate(dt=dt)
             extracted = time_var.extract(current, dt=dt.dt)
             set_var.set_current(extracted, set_boundaries=0)
 
