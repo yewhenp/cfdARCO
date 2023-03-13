@@ -1,3 +1,4 @@
+import types
 from typing import List
 
 import numpy as np
@@ -25,7 +26,7 @@ class Vertex2D:
 
 class Edge2D:
     def __init__(self, vertexes_1_idx=0, vertexes_2_idx=0):
-        self.mesh = None
+        self.mesh: Quadrangle2DMesh = None
         self.id = 0
         self.vertexes_id = np.asarray([vertexes_1_idx, vertexes_2_idx])
         self.nodes_id = []
@@ -62,6 +63,7 @@ class Quadrangle2D:
         self.vertexes_id = np.asarray([v1,v2,v3,v4])
         self.center_coords = np.asarray([0, 0], dtype=np.float64)
         self.vectors_in_edges_directions = np.zeros((4, 2), dtype=np.float64)
+        self.vectors_in_edges_directions_by_id = {}
         self.normals = []
         self.volume = 0
 
@@ -81,12 +83,9 @@ class Quadrangle2D:
         self.center_coords = (p1_coords + p2_coords + p3_coords + p4_coords) / 4
         for i in range(4):
             edge = self.mesh.edged[self.edges_id[i]]
-            direction_vector = np.asarray([
-                (edge.center_coords[0] - self.center_coords[0]),
-                (edge.center_coords[1] - self.center_coords[1]),
-            ], dtype=np.float64)
-            direction_vector = direction_vector / np.linalg.norm(direction_vector)
+            direction_vector = edge.center_coords - self.center_coords
             self.vectors_in_edges_directions[i] = direction_vector
+            self.vectors_in_edges_directions_by_id[edge.id] = direction_vector
         self.volume = 0.5 * (
             p1_coords[0] * p2_coords[1] + p2_coords[0] * p3_coords[1] + p3_coords[0] * p4_coords[1] + p4_coords[0] * p1_coords[1]
             -
@@ -129,6 +128,8 @@ class Quadrangle2DMesh:
         self.edged: List[Edge2D] = []
         self.nodes: List[Quadrangle2D] = []
         self.volumes: np.ndarray = np.zeros(self.num_nodes, dtype=np.float64)
+        self.normal_x: np.ndarray = None
+        self.normal_y: np.ndarray = None
         self._init_internals()
 
     def coord_fo_idx(self, x, y):
@@ -305,6 +306,28 @@ class Quadrangle2DMesh:
                 elem.compute()
         for idx, node in enumerate(self.nodes):
             self.volumes[idx] = node.volume
+
+        normal_x = []
+        normal_y = []
+        edge_area = []
+        for i in range(self.num_nodes):
+            node = self.nodes[i]
+            norm_v_x = []
+            norm_v_y = []
+            for normal in node.normals:
+                norm_v_x.append(normal[0])
+                norm_v_y.append(normal[1])
+            normal_x.append(norm_v_x)
+            normal_y.append(norm_v_y)
+
+            edge_v = []
+            for edge_id in node.edges_id:
+                edge = self.edged[edge_id]
+                edge_v.append(edge.area)
+            edge_area.append(edge_v)
+        self.normal_x = np.asarray(normal_x, dtype=np.float64)
+        self.normal_y = np.asarray(normal_y, dtype=np.float64)
+
 
     @staticmethod
     def _norm_idx_to_glob(node_idx, local_norm_idx):

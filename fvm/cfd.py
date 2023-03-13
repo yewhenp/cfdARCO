@@ -1,85 +1,130 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from fvm import Variable2d, Equation, d1dx, d1dy, d1t, DT, laplass
+from fvm import Variable2d, Equation, d1dx, d1dy, d1t, DT, stab_x, stab_y, to_grid
 from mesh import Quadrangle2DMesh
 
 
-def boundary_u(mesh, arr):
-    for node in mesh.nodes:
-        if node.is_boundary():
-            for vertex_id in node.vertexes_id:
-                vertex = mesh.vertexes[vertex_id]
-                if vertex.y < 1.5:
-                    arr[node.id] = 1
-                    continue
-                else:
-                    arr[node.id] = 0
-                    continue
+def boundary_none(mesh, arr):
     return arr
 
 
-def boundary_v(mesh, arr):
+
+def initial_val_aaa(mesh, val_out, val_in):
+    arr = np.zeros(len(mesh.nodes), dtype=np.float64)
     for node in mesh.nodes:
-        if node.is_boundary():
-            arr[node.id] = 0
+        if .30 < node.y < .70:
+            arr[node.id] = val_in
+        else:
+            arr[node.id] = val_out
     return arr
 
 
-def boundary_pressure(mesh, arr):
+def initial_pertrbations(mesh):
+    arr = np.zeros(len(mesh.nodes), dtype=np.float64)
+    for node in mesh.nodes:
+        if .30 < node.x < .70:
+            arr[node.id] = -0.3
+        else:
+            arr[node.id] = -0.5
+    return arr
+
+
+def boundary_copy(mesh, arr, copy_var):
     for node in mesh.nodes:
         if node.is_boundary():
-            arr[node.id] = 0
+            arr[node.id] = copy_var[node.id]
     return arr
 
 
 if __name__ == '__main__':
-    mesh = Quadrangle2DMesh(60, 60, 60, 60)
-    mesh.compute()
-    timesteps = 100
-    CFL = 0.8
-    rho = 1
-    mu = 0.01
+    L = 100
 
-    u = Variable2d(mesh, np.zeros(len(mesh.nodes)), boundary_u, "u")
-    v = Variable2d(mesh, np.zeros(len(mesh.nodes)), boundary_v, "v")
-    p = Variable2d(mesh, np.zeros(len(mesh.nodes)), boundary_pressure, "p")
-    dt_var = DT(update_fn=DT.UpdatePolicies.CourantFriedrichsLewy, CFL=CFL, space_vars=[u, v])
+    mesh = Quadrangle2DMesh(L, L, 1, 1)
+    mesh.compute()
+
+    timesteps = 1000
+    CFL = 0.5
+    gamma = 5/3
+
+    rho_initial = initial_val_aaa(mesh, 1, 2)
+    rho = Variable2d(mesh, rho_initial, lambda mesh, arr: boundary_copy(mesh, arr, rho_initial.copy()), "rho")
+
+    u_initial = initial_val_aaa(mesh, -0.5, 0.5)
+    u = Variable2d(mesh, u_initial, lambda mesh, arr: boundary_copy(mesh, arr, u_initial.copy()), "u")
+
+    v_initial = initial_pertrbations(mesh)
+    v = Variable2d(mesh, v_initial, lambda mesh, arr: boundary_copy(mesh, arr, v_initial.copy()), "v")
+
+    p_initial = 2.5 * np.ones(len(mesh.nodes), dtype=np.float64)
+    p = Variable2d(mesh, p_initial, lambda mesh, arr: boundary_copy(mesh, arr, p_initial.copy()), "p")
+
+    rho_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "rho")
+    u_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "u")
+    v_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "v")
+    p_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "p")
+
+    mass_initial = rho.current * mesh.volumes
+    mass = Variable2d(mesh, mass_initial, lambda mesh, arr: boundary_copy(mesh, arr, mass_initial.copy()), "mass")
+
+    rho_u_initial = rho.current * u.current * mesh.volumes
+    rho_u = Variable2d(mesh, rho_u_initial, lambda mesh, arr: boundary_copy(mesh, arr, rho_u_initial.copy()), "rho_u")
+
+    rho_v_initial = rho.current * v.current * mesh.volumes
+    rho_v = Variable2d(mesh, rho_v_initial, lambda mesh, arr: boundary_copy(mesh, arr, rho_v_initial.copy()), "rho_v")
+
+    E = p / (gamma - 1) + 0.5 * rho * (u * u + v * v)
+    E_initial = (p.current / (gamma - 1) + 0.5 * rho.current * (u.current * u.current + v.current * v.current)) * mesh.volumes
+    rho_e = Variable2d(mesh, E_initial, lambda mesh, arr: boundary_copy(mesh, arr, E_initial.copy()), "rho_e")
+
+    dt = DT(update_fn=DT.UpdatePolicies.CourantFriedrichsLewy, CFL=CFL, space_vars=[u, v, p, rho, gamma, L])
 
     equation_system = [
-        [d1t(u),        "=",    -u*d1dx(u) - v*d1dy(u) + laplass(u) * (mu/rho) ],
-        [d1t(v),        "=",    -u*d1dx(v) - v*d1dy(v) + laplass(v) * (mu/rho) ],
-        [laplass(p),    "=",    -rho / dt_var * (d1dx(u) + d1dy(v))                     ],
-        [d1t(u),        "=",    -d1dx(p) / rho                                          ],
-        [d1t(v),        "=",    -d1dy(p) / rho                                          ],
+        [rho, "=", mass / mesh.volumes],
+        [u, "=", rho_u / rho / mesh.volumes],
+        [v, "=", rho_v / rho / mesh.volumes],
+        [p, "=", (rho_e / mesh.volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)],
+
+        [rho_t_h, "=", rho - 0.5 * dt * (u * rho.dx + rho * u.dx + v * rho.dy + rho * v.dy)],
+        [u_t_h, "=", u - 0.5 * dt * (u * u.dx + v * u.dy + (1/rho) * p.dx)],
+        [v_t_h, "=", v - 0.5 * dt * (u * v.dx + v * v.dy + (1/rho) * p.dy)],
+        [p_t_h, "=", p - 0.5 * dt * (gamma * p * (u.dx + v.dy) + u * p.dx + v * p.dy)],
+
+        [rho, "=", rho_t_h],
+        [u, "=", u_t_h],
+        [v, "=", v_t_h],
+        [p, "=", p_t_h],
+
+        [d1t(mass), "=", -((d1dx(rho*u) + d1dy(rho*v)) - (stab_x(rho) + stab_y(rho)))],
+        [d1t(rho_u),    "=", -((d1dx(rho*u*u + p)  + d1dy(rho*v*u)) - (stab_x(rho*u) + stab_y(rho*u))) ],
+        [d1t(rho_v),    "=", -((d1dx(rho*v*u)  + d1dy(rho*v*v + p)) - (stab_x(rho*v) + stab_y(rho*v))) ],
+        [d1t(rho_e), "=", -((d1dx((E + p) * u) + d1dy((E + p) * v)) - (stab_x(E) + stab_y(E))) ],
+
+        [rho, "=", mass / mesh.volumes],
+        [u, "=", rho_u / rho / mesh.volumes],
+        [v, "=", rho_v / rho / mesh.volumes],
+        [p, "=", (rho_e / mesh.volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)],
     ]
 
+
     equation = Equation(timesteps)
-    history = equation.evaluate([u, v, p],
-                                equation_system,
-                                dt_var)
+    equation.evaluate([rho, u, v, p, mass, rho_u, rho_v, rho_e], equation_system, dt)
 
 
     fig, ax = plt.subplots()
-    u_pic = np.zeros((mesh.x, mesh.y))
-    v_pic = np.zeros((mesh.x, mesh.y))
-    X, Y = np.meshgrid(np.linspace(0, mesh.x, mesh.x-1), np.linspace(0, mesh.y, mesh.y-1))
 
     def animate(i):
-        print(i)
-
-        data_u = history[0][i]
-        data_v = history[1][i]
+        j = i*10
+        print(j)
+        rho_pic = np.zeros((mesh.x, mesh.y), dtype=np.float64)
+        data_rho = rho.history[j]
         for x_ in range(mesh.x):
             for y_ in range(mesh.y):
-                u_pic[x_, y_] = data_u[mesh.coord_fo_idx(x_, y_)]
-                v_pic[x_, y_] = data_v[mesh.coord_fo_idx(x_, y_)]
+                rho_pic[x_, y_] = data_rho[mesh.coord_fo_idx(x_, y_)]
 
-
-        u_curr_history = u_pic[1:-1, 1:-1]
-        v_curr_history = v_pic[1:-1, 1:-1]
         ax.clear()
-        ax.streamplot(X[1:, 1:], Y[1:, 1:], u_curr_history, v_curr_history)
+        ax.imshow(rho_pic)
 
-    anim = animation.FuncAnimation(fig, animate, frames=timesteps, repeat=False)
+    anim = animation.FuncAnimation(fig, animate, frames=int(timesteps / 10), repeat=False)
+    anim.save("cfd.gif")
     plt.show()
