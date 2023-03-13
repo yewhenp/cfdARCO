@@ -61,8 +61,17 @@ class Quadrangle2D:
         self.edges_id = np.asarray([e1,e2,e3,e4])
         self.vertexes_id = np.asarray([v1,v2,v3,v4])
         self.center_coords = np.asarray([0, 0])
-        self.vectors_in_edges_directions = np.zeros((4, 2))
+        self.vectors_in_edges_directions = np.zeros((4, 2), dtype=np.float16)
+        self.normals = []
         self.volume = 0
+
+    @property
+    def x(self):
+        return self.center_coords[0]
+
+    @property
+    def y(self):
+        return self.center_coords[1]
 
     def compute(self):
         p1_coords = self.mesh.vertexes[self.vertexes_id[0]].coords
@@ -83,6 +92,18 @@ class Quadrangle2D:
             -
             (p1_coords[1] * p2_coords[0] + p2_coords[1] * p3_coords[0] + p3_coords[1] * p4_coords[0] + p4_coords[1] * p1_coords[0] )
         )
+        for i in range(len(self.vertexes_id) - 1):
+            v0_id, v1_id = self.vertexes_id[i], self.vertexes_id[i+1]
+            v0, v1 = self.mesh.vertexes[v0_id], self.mesh.vertexes[v1_id]
+            dx = v1.x - v0.x
+            dy = v1.y - v0.y
+            self.normals.append(np.asarray([dy, -dx]))
+        v0_id, v1_id = self.vertexes_id[-1], self.vertexes_id[0]
+        v0, v1 = self.mesh.vertexes[v0_id], self.mesh.vertexes[v1_id]
+        dx = v1.x - v0.x
+        dy = v1.y - v0.y
+        self.normals.append(np.asarray([dy, -dx]))
+
 
     def __repr__(self):
         return f"Quadrangle2D(volume={self.volume}, p1=({self.mesh.vertexes[self.vertexes_id[0]].coords}), p2=({self.mesh.vertexes[self.vertexes_id[1]].coords}), p3=({self.mesh.vertexes[self.vertexes_id[2]].coords}), p4=({self.mesh.vertexes[self.vertexes_id[3]].coords}))"
@@ -107,6 +128,7 @@ class Quadrangle2DMesh:
         self.vertexes: List[Vertex2D] = []
         self.edged: List[Edge2D] = []
         self.nodes: List[Quadrangle2D] = []
+        self.volumes: np.ndarray = np.zeros(self.num_nodes, dtype=np.float16)
         self._init_internals()
 
     def coord_fo_idx(self, x, y):
@@ -281,7 +303,8 @@ class Quadrangle2DMesh:
             for elem in list_entry:
                 elem.mesh = self
                 elem.compute()
-
+        for idx, node in enumerate(self.nodes):
+            self.volumes[idx] = node.volume
 
     @staticmethod
     def _norm_idx_to_glob(node_idx, local_norm_idx):
