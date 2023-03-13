@@ -11,7 +11,7 @@ def boundary_none(mesh, arr):
 
 
 def initial_val_aaa(mesh, val_out, val_in):
-    arr = np.zeros(len(mesh.nodes), dtype=np.float16)
+    arr = np.zeros(len(mesh.nodes), dtype=np.float64)
     for node in mesh.nodes:
         if .30 < node.y < .70:
             arr[node.id] = val_in
@@ -21,7 +21,7 @@ def initial_val_aaa(mesh, val_out, val_in):
 
 
 def initial_pertrbations(mesh):
-    arr = np.zeros(len(mesh.nodes), dtype=np.float16)
+    arr = np.zeros(len(mesh.nodes), dtype=np.float64)
     for node in mesh.nodes:
         if .30 < node.x < .70:
             arr[node.id] = -0.3
@@ -58,12 +58,12 @@ def boundary_copy(mesh, arr, copy_var):
 
 
 if __name__ == '__main__':
-    L = 50
+    L = 100
 
     mesh = Quadrangle2DMesh(L, L, 1, 1)
     mesh.compute()
 
-    timesteps = 30
+    timesteps = 150
     CFL = 0.5
     gamma = 5/3
 
@@ -76,13 +76,13 @@ if __name__ == '__main__':
     v_initial = initial_pertrbations(mesh)
     v = Variable2d(mesh, v_initial, lambda mesh, arr: boundary_copy(mesh, arr, v_initial.copy()), "v")
 
-    p_initial = 2.5 * np.ones(len(mesh.nodes))
+    p_initial = 2.5 * np.ones(len(mesh.nodes), dtype=np.float64)
     p = Variable2d(mesh, p_initial, lambda mesh, arr: boundary_copy(mesh, arr, p_initial.copy()), "p")
 
-    rho_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float16), boundary_none, "rho")
-    u_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float16), boundary_none, "u")
-    v_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float16), boundary_none, "v")
-    p_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float16), boundary_none, "p")
+    rho_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "rho")
+    u_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "u")
+    v_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "v")
+    p_t_h = Variable2d(mesh, np.zeros_like(rho_initial, dtype=np.float64), boundary_none, "p")
 
     mass_initial = rho.current * mesh.volumes
     mass = Variable2d(mesh, mass_initial, lambda mesh, arr: boundary_copy(mesh, arr, mass_initial.copy()), "mass")

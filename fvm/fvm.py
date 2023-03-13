@@ -16,6 +16,10 @@ class Variable:
             self._grad_cache = None
             self._grad_cache_valid = False
 
+    @property
+    def cache_valid(self):
+        return self._cache_valid
+
     def set_bound(self):
         self.current = self.boundary_conditions(self.mesh, self.current)
 
@@ -27,11 +31,11 @@ class Variable:
             return self._grad_cache
 
         current = self.current
-        ret = np.zeros((self.mesh.num_nodes, 2), dtype=np.float16)
+        ret = np.zeros((self.mesh.num_nodes, 2), dtype=np.float64)
 
         for i in range(self.mesh.num_nodes):
             node = self.mesh.nodes[i]
-            summ = np.asarray([0.0, 0.0])
+            summ = np.asarray([0.0, 0.0], dtype=np.float64)
             for idx, edge_id in enumerate(node.edges_id):
                 edge = self.mesh.edged[edge_id]
                 if len(edge.nodes_id) > 1:
@@ -61,7 +65,7 @@ class Variable:
 
     @property
     def grid(self):
-        grid = np.zeros((self.mesh.x, self.mesh.y), dtype=np.float16)
+        grid = np.zeros((self.mesh.x, self.mesh.y), dtype=np.float64)
         for x_ in range(self.mesh.x):
             for y_ in range(self.mesh.y):
                 grid[x_, y_] = self.current[self.mesh.coord_fo_idx(x_, y_)]
@@ -124,7 +128,7 @@ class Variable:
         grads = self.estimate_grads()
         # ret = np.zeros((self.mesh.num_nodes, 4, 2, 2))
         # ret = np.zeros((self.mesh.num_nodes, 4, 2))
-        ret = np.zeros((self.mesh.num_nodes, 4, 3), dtype=np.float16)
+        ret = np.zeros((self.mesh.num_nodes, 4, 3), dtype=np.float64)
         # ret = np.zeros((self.mesh.num_nodes, 4))
 
         for i in range(self.mesh.num_nodes):
@@ -236,9 +240,9 @@ class _GradEstimated(Variable):
         self.var = var
         self.clc_x = clc_x
         self.clc_y = clc_y
-        self.mask_x = np.asarray([[0, 1, 0, 1]])
-        self.mask_y = np.asarray([[1, 0, 1, 0]])
-        self.clc = np.asarray([clc_x, clc_y])
+        self.mask_x = np.asarray([[0, 1, 0, 1]], dtype=np.float64)
+        self.mask_y = np.asarray([[1, 0, 1, 0]], dtype=np.float64)
+        self.clc = np.asarray([clc_x, clc_y], dtype=np.float64)
 
     def evaluate(self, **kwargs):
         grads = self.var.estimate_grads()
@@ -248,6 +252,7 @@ class _GradEstimated(Variable):
             return grads[:,0]
         if self.clc_y:
             return grads[:,1]
+
 
 class DT(Variable):
     class UpdatePolicies:
@@ -259,9 +264,10 @@ class DT(Variable):
         def CourantFriedrichsLewy(CFL, space_vars, **kwargs):
             u, v, p, rho, gamma, l = space_vars
             dl = 1 / l
+
             with np.errstate(divide='ignore'):
-                dt = CFL / np.max([np.amax(u.current) / dl, np.amax(v.current) / dl, np.amax(p.current) / dl, np.amax(rho.current) / dl])
-                # dt = CFL * np.min(dl / (np.sqrt(gamma * p.current / rho.current) + np.sqrt(u.current ** 2 + v.current ** 2)))
+                # dt = CFL / np.max([np.amax(u.current) / dl, np.amax(v.current) / dl, np.amax(p.current) / dl, np.amax(rho.current) / dl])
+                dt = CFL * np.min(dl / (np.sqrt(gamma * p.current / rho.current) + np.sqrt(u.current ** 2 + v.current ** 2)))
             if np.isinf(dt):
                 dt = CFL * 2
             return dt
@@ -272,6 +278,11 @@ class DT(Variable):
         self._dt = 0
         self.update_fn = update_fn
         self.params = params
+
+    @property
+    def cache_valid(self):
+        return False
+
 
     def evaluate(self, **kwargs):
         return self._dt
@@ -323,13 +334,16 @@ class _SubVariable(Variable):
         if isinstance(self.right_operand, Variable):
             return self.right_operand.mesh
 
-    def get_interface_vars_first_order(self, **kwargs):
+    @property
+    def cache_valid(self):
         if isinstance(self.left_operand, Variable):
-            self._cache_valid = self._cache_valid and self.left_operand._cache_valid
+            self._cache_valid = self._cache_valid and self.left_operand.cache_valid
         if isinstance(self.right_operand, Variable):
-            self._cache_valid = self._cache_valid and self.right_operand._cache_valid
+            self._cache_valid = self._cache_valid and self.right_operand.cache_valid
+        return self._cache_valid
 
-        if self._cache_valid:
+    def get_interface_vars_first_order(self, **kwargs):
+        if self.cache_valid:
             return self._cache
 
         if isinstance(self.left_operand, Variable):
@@ -343,7 +357,7 @@ class _SubVariable(Variable):
 
         res = self.op(left_eval, right_eval)
 
-        self._cache_valid = True
+        # self._cache_valid = True
         self._cache = res
         return res
 
@@ -392,15 +406,15 @@ class _Laplass(Variable):
         self.var = var
         self.clc_x = clc_x
         self.clc_y = clc_y
-        self.mask_x = np.asarray([[0, 1, 0, 1]])
-        self.mask_y = np.asarray([[1, 0, 1, 0]])
-        self.clc = np.asarray([clc_x, clc_y])
+        self.mask_x = np.asarray([[0, 1, 0, 1]], dtype=np.float64)
+        self.mask_y = np.asarray([[1, 0, 1, 0]], dtype=np.float64)
+        self.clc = np.asarray([clc_x, clc_y], dtype=np.float64)
 
     def set_current(self, current, **kwargs):
         self.var.set_current(current, **kwargs)
 
     def evaluate(self, **kwargs):
-        ret = np.zeros_like(self.var.current, dtype=np.float16)
+        ret = np.zeros_like(self.var.current, dtype=np.float64)
 
         for i in range(self.var.mesh.num_nodes):
             node = self.var.mesh.nodes[i]
@@ -431,7 +445,7 @@ class _Laplass(Variable):
                         n1, n2 = n2, n1
 
                     FC_v = n2.center_coords - n1.center_coords
-                    dist_between_nodes = np.sqrt(np.sum((FC_v) ** 2))
+                    dist_between_nodes = np.sqrt(np.sum((FC_v) ** 2, dtype=np.float64), dtype=np.float64)
                     FC_v_e = FC_v / dist_between_nodes
 
                     fi = (self.var.current[n1.id] - self.var.current[n2.id]) / dist_between_nodes
@@ -471,7 +485,7 @@ class _Laplass(Variable):
                     # cross_dif_term = nabla_Tf * Tf
 
                     # flux = np.sum(ort_term + cross_dif_term)
-                    flux = np.sum(ort_term)
+                    flux = np.sum(ort_term, dtype=np.float64)
                     summ += flux
 
                 summ /= node.volume
@@ -483,7 +497,7 @@ class _Laplass(Variable):
         deltas = self.var.get_deltas()
         var_old = self.var.current.copy()
         var_xy_ = (var_old[2:, 1:-1] + var_old[:-2, 1:-1]) * deltas[0] ** 2 + (var_old[1:-1, 2:] + var_old[1:-1, :-2]) * deltas[1] ** 2
-        var_xy = np.zeros_like(var_old, dtype=np.float16)
+        var_xy = np.zeros_like(var_old, dtype=np.float64)
         var_xy[1:-1, 1:-1] = var_xy_
         left_part_xy = left_part * deltas[0] ** 2 * deltas[1] ** 2
         return (var_xy + left_part_xy) / (2 * (deltas[0] ** 2 + deltas[1] ** 2))
@@ -495,9 +509,9 @@ class _Grad(Variable):
         self.var = var
         self.clc_x = clc_x
         self.clc_y = clc_y
-        self.mask_x = np.asarray([[0, 1, 0, 1]])
-        self.mask_y = np.asarray([[1, 0, 1, 0]])
-        self.clc = np.asarray([clc_x, clc_y])
+        self.mask_x = np.asarray([[0, 1, 0, 1]], dtype=np.float64)
+        self.mask_y = np.asarray([[1, 0, 1, 0]], dtype=np.float64)
+        self.clc = np.asarray([clc_x, clc_y], dtype=np.float64)
 
     def set_current(self, current, **kwargs):
         self.var.set_current(current, **kwargs)
@@ -523,8 +537,8 @@ class _Grad(Variable):
                 edge = self.var.mesh.edged[edge_id]
                 edge_v.append(edge.area)
             edge_area.append(edge_v)
-        normal_x = np.asarray(normal_x)
-        normal_y = np.asarray(normal_y)
+        normal_x = np.asarray(normal_x, dtype=np.float64)
+        normal_y = np.asarray(normal_y, dtype=np.float64)
 
 
         # current_interface_gradients *= np.asarray(edge_area)
@@ -535,10 +549,10 @@ class _Grad(Variable):
         grad_x = current_interface_gradients_star[:,:] * normal_x
         grad_y = current_interface_gradients_star[:,:] * normal_y
 
-        res_x = np.sum(grad_x, axis=1)
-        res_y = np.sum(grad_y, axis=1)
+        res_x = np.sum(grad_x, axis=1, dtype=np.float64)
+        res_y = np.sum(grad_y, axis=1, dtype=np.float64)
 
-        res = np.zeros_like(res_x, dtype=np.float16)
+        res = np.zeros_like(res_x, dtype=np.float64)
         if self.clc_x:
             res += res_x
         if self.clc_y:
@@ -553,9 +567,9 @@ class _Stab(Variable):
         self.var = var
         self.clc_x = clc_x
         self.clc_y = clc_y
-        self.mask_x = np.asarray([[0, 1, 0, 1]])
-        self.mask_y = np.asarray([[1, 0, 1, 0]])
-        self.clc = np.asarray([clc_x, clc_y])
+        self.mask_x = np.asarray([[0, 1, 0, 1]], dtype=np.float64)
+        self.mask_y = np.asarray([[1, 0, 1, 0]], dtype=np.float64)
+        self.clc = np.asarray([clc_x, clc_y], dtype=np.float64)
 
     def set_current(self, current, **kwargs):
         self.var.set_current(current, **kwargs)
@@ -583,16 +597,16 @@ class _Stab(Variable):
                 edge = self.var.mesh.edged[edge_id]
                 edge_v.append(edge.area)
             edge_area.append(edge_v)
-        normal_x = np.asarray(normal_x)
-        normal_y = np.asarray(normal_y)
+        normal_x = np.asarray(normal_x, dtype=np.float64)
+        normal_y = np.asarray(normal_y, dtype=np.float64)
 
         grad_x = current_interface_gradients_star[:,:] * normal_x
         grad_y = current_interface_gradients_star[:,:] * normal_y
 
-        res_x = np.sum(grad_x, axis=1)
-        res_y = np.sum(grad_y, axis=1)
+        res_x = np.sum(grad_x, axis=1, dtype=np.float64)
+        res_y = np.sum(grad_y, axis=1, dtype=np.float64)
 
-        res = np.zeros_like(res_x, dtype=np.float16)
+        res = np.zeros_like(res_x, dtype=np.float64)
         if self.clc_x:
             res += res_x
         if self.clc_y:
@@ -636,7 +650,7 @@ def to_grid(arr):
     def coord_fo_idx(x, y):
         return x * 10 + y
 
-    grid = np.zeros((10, 10), dtype=np.float16)
+    grid = np.zeros((10, 10), dtype=np.float64)
     for x_ in range(10):
         for y_ in range(10):
             grid[x_, y_] = arr[coord_fo_idx(x_, y_)]
