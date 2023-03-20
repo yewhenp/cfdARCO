@@ -54,7 +54,7 @@ public:
     std::array<size_t, 4> _vertexes_id;
     Eigen::Vector2d _center_coords = {0, 0};
     Eigen::Matrix<double, 4, 2> _vectors_in_edges_directions = {};
-    std::unordered_map<size_t, Eigen::Vector2d> _vectors_in_edges_directions_by_id = {};
+    std::unordered_map<size_t, Eigen::Matrix<double, 1, 2>> _vectors_in_edges_directions_by_id = {};
     Eigen::Matrix<double, 4, 2> _normals = {};
     double _volume = 0;
 };
