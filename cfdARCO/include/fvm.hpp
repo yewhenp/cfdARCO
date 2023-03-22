@@ -15,47 +15,57 @@ class Variable {
 public:
     Variable();
     Variable(Mesh2D* mesh_, Eigen::VectorXd& initial_, BoundaryFN boundary_conditions_, std::string name_="");
-    Variable(Variable* left_operand_, Variable* right_operand_, std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op_, std::string& name_);
+    Variable(const Variable* left_operand_, const Variable* right_operand_, std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op_, std::string& name_);
+    Variable(Mesh2D *mesh_, double value);
+    Variable(Eigen::VectorXd& curr_);
     void set_bound();
     void add_history();
     Eigen::MatrixXd estimate_grads();
     _GradEstimated dx();
     _GradEstimated dy();
-    std::tuple<Eigen::MatrixX4d, Eigen::MatrixX4d, Eigen::MatrixX4d> get_interface_vars_first_order();
-    Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
-    virtual Eigen::VectorXd evaluate();
+    std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> get_interface_vars_first_order();
+    virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
+    virtual Eigen::MatrixXd evaluate();
     void set_current(Eigen::VectorXd& current_);
     std::vector<Eigen::VectorXd> get_history();
-    void solve(Variable& equation, DT& dt);
+    virtual void solve(Variable& equation, DT& dt);
 
-
+public:
     std::string name;
     Mesh2D *mesh = nullptr;
     Eigen::VectorXd current;
     BoundaryFN boundary_conditions;
     std::vector<Eigen::VectorXd> history {};
-    size_t num_nodes;
+    size_t num_nodes = 0;
     bool is_subvariable = false;
+    bool is_constvar = false;
 
 //    from subvariable
     Variable* left_operand = nullptr;
     Variable* right_operand = nullptr;
     std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op;
 
-    Variable operator+(Variable & obj_r);
-    Variable operator-(Variable & obj_r);
-    Variable operator*(Variable & obj_r);
-    Variable operator/(Variable & obj_r);
-    Variable operator-();
+    Variable operator+(const Variable & obj_r) const;
+    Variable operator-(const Variable & obj_r) const;
+    Variable operator*(const Variable & obj_r) const;
+    Variable operator/(const Variable & obj_r) const;
+    Variable operator-() const;
 };
 
+Variable operator+(const double obj_l, const Variable & obj_r);
+Variable operator-(const double obj_l, const Variable & obj_r);
+Variable operator*(const double obj_l, const Variable & obj_r);
+Variable operator/(const double obj_l, const Variable & obj_r);
+Variable operator+(const Variable & obj_l, const double obj_r);
+Variable operator-(const Variable & obj_l, const double obj_r);
+Variable operator*(const Variable & obj_l, const double obj_r);
+Variable operator/(const Variable & obj_l, const double obj_r);
 
-
-class _GradEstimated : Variable {
+class _GradEstimated : public Variable {
 public:
     explicit _GradEstimated(Variable* var_, bool clc_x_=true, bool clc_y_=true);
 
-    Eigen::VectorXd evaluate() override;
+    Eigen::MatrixXd evaluate() override;
 
     Variable* var;
     bool clc_x;
@@ -69,20 +79,27 @@ public:
 };
 
 
-class DT : Variable {
+class DT : public Variable {
 public:
     DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable*>&)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
     void update();
-    Eigen::VectorXd evaluate() override;
+    Eigen::MatrixXd evaluate() override;
 
-    Mesh2D* mesh = nullptr;
     std::function<double(double, std::vector<Variable*>&)> update_fn;
     std::vector<Variable*>& space_vars;
     double _dt = 0.0;
     double CFL = 0.0;
 };
 
-class Variable2d : Variable {};
+class Variable2d : Variable {
+public:
+    using Variable::Variable;
+    using Variable::current;
+    using Variable::operator*;
+    using Variable::operator+;
+    using Variable::operator-;
+    using Variable::operator/;
+};
 
 //class _SubVariable : Variable {
 //public:
@@ -94,52 +111,79 @@ class Variable2d : Variable {};
 //    std::string& name;
 //};
 
-class _DT : Variable {
+class _DT : public Variable {
 public:
     _DT(Variable* var_);
 
+    Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt) override;
+    void solve(Variable& equation, DT& dt) override;
+
     Variable* var;
 };
 
 
-class _Grad : Variable {
+class _Grad : public Variable {
 public:
     _Grad(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
+    Eigen::MatrixXd evaluate() override;
+
     Variable* var;
     bool clc_x;
     bool clc_y;
 };
 
 
-class _Stab : Variable {
+class _Stab : public Variable {
 public:
     _Stab(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
+    Eigen::MatrixXd evaluate() override;
+
     Variable* var;
     bool clc_x;
     bool clc_y;
 };
 
 
-inline auto d1t(Variable* var) {
-    return _DT(var);
+inline auto d1t(Variable& var) {
+    return _DT(&var);
 }
 
-inline auto d1dx(Variable* var) {
-    return _Grad(var, true, false);
+inline auto d1t(Variable&& var) {
+    return _DT(&var);
 }
 
-inline auto d1dy(Variable* var) {
-    return _Grad(var,  false, true);
+inline auto d1dx(Variable& var) {
+    return _Grad(&var, true, false);
 }
 
-inline auto stab_x(Variable* var) {
-    return _Stab(var, true, false);
+inline auto d1dx(Variable&& var) {
+    return _Grad(&var, true, false);
 }
 
-inline auto stab_y(Variable* var) {
-    return _Stab(var,  false, true);
+inline auto d1dy(Variable& var) {
+    return _Grad(&var,  false, true);
+}
+
+inline auto d1dy(Variable&& var) {
+    return _Grad(&var,  false, true);
+}
+
+inline auto stab_x(Variable& var) {
+    return _Stab(&var, true, false);
+}
+
+inline auto stab_x(Variable&& var) {
+    return _Stab(&var, true, false);
+}
+
+inline auto stab_y(Variable& var) {
+    return _Stab(&var,  false, true);
+}
+
+inline auto stab_y(Variable&& var) {
+    return _Stab(&var,  false, true);
 }
 
 
@@ -152,7 +196,7 @@ public:
 class Equation {
 public:
     Equation(size_t timesteps_);
-    void evaluate(std::vector<Variable*>&all_vars, std::vector<std::tuple<Variable*, char, Variable*>>&equation_system, DT* dt);
+    void evaluate(std::vector<Variable>&all_vars, std::vector<std::tuple<Variable, char, Variable>>&equation_system, DT& dt);
 
     size_t timesteps;
 };
