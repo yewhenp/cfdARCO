@@ -3,6 +3,7 @@
 
 #include "mesh2d.hpp"
 #include <optional>
+#include <memory>
 
 class Variable;
 //class _SubVariable;
@@ -15,9 +16,17 @@ class Variable {
 public:
     Variable();
     Variable(Mesh2D* mesh_, Eigen::VectorXd& initial_, BoundaryFN boundary_conditions_, std::string name_="");
-    Variable(const Variable* left_operand_, const Variable* right_operand_, std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op_, std::string& name_);
-    Variable(Mesh2D *mesh_, double value);
+    Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op_, std::string& name_);
+    Variable(Mesh2D* mesh_, double value);
     Variable(Eigen::VectorXd& curr_);
+
+    Variable(Variable&);
+    Variable(const Variable&);
+    Variable(Variable&&) = delete;
+    Variable(const Variable&&) = delete;
+
+    virtual std::shared_ptr<Variable> clone() const;
+
     void set_bound();
     void add_history();
     Eigen::MatrixXd estimate_grads();
@@ -28,7 +37,7 @@ public:
     virtual Eigen::MatrixXd evaluate();
     void set_current(Eigen::VectorXd& current_);
     std::vector<Eigen::VectorXd> get_history();
-    virtual void solve(Variable& equation, DT& dt);
+    virtual void solve(Variable* equation, DT* dt);
 
 public:
     std::string name;
@@ -39,10 +48,11 @@ public:
     size_t num_nodes = 0;
     bool is_subvariable = false;
     bool is_constvar = false;
+    bool is_basically_created = false;
 
 //    from subvariable
-    Variable* left_operand = nullptr;
-    Variable* right_operand = nullptr;
+    std::shared_ptr<Variable> left_operand = nullptr;
+    std::shared_ptr<Variable> right_operand = nullptr;
     std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op;
 
     Variable operator+(const Variable & obj_r) const;
@@ -63,9 +73,10 @@ Variable operator/(const Variable & obj_l, const double obj_r);
 
 class _GradEstimated : public Variable {
 public:
-    explicit _GradEstimated(Variable* var_, bool clc_x_=true, bool clc_y_=true);
+    explicit _GradEstimated(Variable *var_, bool clc_x_=true, bool clc_y_=true);
 
     Eigen::MatrixXd evaluate() override;
+    std::shared_ptr<Variable> clone() const override;
 
     Variable* var;
     bool clc_x;
@@ -84,6 +95,7 @@ public:
     DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable*>&)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
     void update();
     Eigen::MatrixXd evaluate() override;
+    std::shared_ptr<Variable> clone() const override;
 
     std::function<double(double, std::vector<Variable*>&)> update_fn;
     std::vector<Variable*>& space_vars;
@@ -101,24 +113,16 @@ public:
     using Variable::operator/;
 };
 
-//class _SubVariable : Variable {
-//public:
-//    _SubVariable(Variable& left_operand_, Variable& right_operand_, std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op_, std::string& name_);
-//
-//    Variable* left_operand;
-//    Variable* right_operand;
-//    std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op;
-//    std::string& name;
-//};
 
 class _DT : public Variable {
 public:
-    _DT(Variable* var_);
+    _DT(Variable* var_, int);
 
     Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt) override;
-    void solve(Variable& equation, DT& dt) override;
+    void solve(Variable* equation, DT* dt) override;
+    std::shared_ptr<Variable> clone() const override;
 
-    Variable* var;
+    std::shared_ptr<Variable> var;
 };
 
 
@@ -127,8 +131,9 @@ public:
     _Grad(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
     Eigen::MatrixXd evaluate() override;
+    std::shared_ptr<Variable> clone() const override;
 
-    Variable* var;
+    std::shared_ptr<Variable> var;
     bool clc_x;
     bool clc_y;
 };
@@ -139,19 +144,24 @@ public:
     _Stab(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
     Eigen::MatrixXd evaluate() override;
+    std::shared_ptr<Variable> clone() const override;
 
-    Variable* var;
+    std::shared_ptr<Variable> var;
     bool clc_x;
     bool clc_y;
 };
 
 
 inline auto d1t(Variable& var) {
-    return _DT(&var);
+    auto varr = new _DT(&var, 0);
+    varr->name = "d1t(" + var.name + ")";
+    return varr;
 }
 
 inline auto d1t(Variable&& var) {
-    return _DT(&var);
+    auto varr = new _DT(&var, 0);
+    varr->name = "d1t(" + var.name + ")";
+    return varr;
 }
 
 inline auto d1dx(Variable& var) {
@@ -196,11 +206,23 @@ public:
 class Equation {
 public:
     Equation(size_t timesteps_);
-    void evaluate(std::vector<Variable>&all_vars, std::vector<std::tuple<Variable, char, Variable>>&equation_system, DT& dt);
+    void evaluate(std::vector<Variable*>&all_vars, std::vector<std::tuple<Variable*, char, Variable>>&equation_system, DT* dt);
 
     size_t timesteps;
 };
 
+
+Eigen::MatrixXd to_grid(Mesh2D* mesh, Eigen::VectorXd& values);
+
+template<typename Scalar, typename Matrix>
+inline static std::vector< std::vector<Scalar> > from_eigen_matrix( const Matrix & M ){
+    std::vector< std::vector<Scalar> > m;
+    m.resize(M.rows(), std::vector<Scalar>(M.cols(), 0));
+    for(size_t i = 0; i < m.size(); i++)
+        for(size_t j = 0; j < m.front().size(); j++)
+            m[i][j] = M(i,j);
+    return m;
+}
 
 
 #endif //CFDARCO_FVM_HPP

@@ -135,18 +135,10 @@ void Mesh2D::init_basic_internals() {
 
                 auto n = Quadrangle2D(e1._id, e2._id, e3._id, e4._id, v1._id, v2._id, v3._id, v4._id, 0);
 
-                if (std::find(e1._nodes_id.begin(), e1._nodes_id.end(), n._id) == e1._nodes_id.end()) {
-                    e1._nodes_id.push_back(n._id);
-                }
-                if (std::find(e2._nodes_id.begin(), e2._nodes_id.end(), n._id) == e2._nodes_id.end()) {
-                    e2._nodes_id.push_back(n._id);
-                }
-                if (std::find(e3._nodes_id.begin(), e3._nodes_id.end(), n._id) == e3._nodes_id.end()) {
-                    e3._nodes_id.push_back(n._id);
-                }
-                if (std::find(e4._nodes_id.begin(), e4._nodes_id.end(), n._id) == e4._nodes_id.end()) {
-                    e4._nodes_id.push_back(n._id);
-                }
+                e1._nodes_id.push_back(n._id);
+                e2._nodes_id.push_back(n._id);
+                e3._nodes_id.push_back(n._id);
+                e4._nodes_id.push_back(n._id);
 
                 _vertexes.push_back(v1);
                 _vertexes.push_back(v2);

@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 find_package (indicators REQUIRED)
+find_package(Matplot++ REQUIRED)
 
 add_executable(cfdARCO main.cpp include/abstract_mesh.hpp include/mesh2d.hpp src/mesh2d.cpp include/fvm.hpp src/fvm.cpp)
 
@@ -12,3 +13,4 @@ target_include_directories(cfdARCO PRIVATE include)
 
 target_link_libraries (cfdARCO Eigen3::Eigen)
 target_link_libraries (cfdARCO indicators::indicators)
+target_link_libraries (cfdARCO Matplot++::matplot)
