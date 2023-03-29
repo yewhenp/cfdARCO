@@ -10,10 +10,10 @@
 Eigen::VectorXd initial_val(Mesh2D* mesh, double val_out, double val_in) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     for (auto& node : mesh->_nodes) {
-        if (.3 < node.y() && node.y() < .7) {
-            ret(node._id) = val_in;
+        if (.3 < node->y() && node->y() < .7) {
+            ret(node->_id) = val_in;
         } else {
-            ret(node._id) = val_out;
+            ret(node->_id) = val_out;
         }
     }
     return ret;
@@ -22,10 +22,10 @@ Eigen::VectorXd initial_val(Mesh2D* mesh, double val_out, double val_in) {
 Eigen::VectorXd initial_pertrubations(Mesh2D* mesh, double val_out, double val_in) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     for (auto& node : mesh->_nodes) {
-        if (.3 < node.x() && node.x() < .7) {
-            ret(node._id) = val_in;
+        if (.3 < node->x() && node->x() < .7) {
+            ret(node->_id) = val_in;
         } else {
-            ret(node._id) = val_out;
+            ret(node->_id) = val_out;
         }
     }
     return ret;
@@ -37,8 +37,8 @@ Eigen::VectorXd boundary_none(Mesh2D* mesh, Eigen::VectorXd& arr) {
 
 Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
     for (auto& node : mesh->_nodes) {
-        if (node.is_boundary()) {
-            arr(node._id) = copy_var(node._id);
+        if (node->is_boundary()) {
+            arr(node->_id) = copy_var(node->_id);
         }
     }
     return arr;
@@ -46,8 +46,8 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 
 
 int main() {
-    size_t L = 4;
-    size_t timesteps = 1;
+    size_t L = 100;
+    size_t timesteps = 1000;
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
@@ -67,7 +67,7 @@ int main() {
                           [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, u_initial); },
                           "u");
 
-    auto v_initial = initial_pertrubations(&mesh, -0.3, -0.5);
+    auto v_initial = initial_pertrubations(&mesh, -0.5, -0.3);
     auto v = Variable(&mesh,
                         v_initial,
                         [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, v_initial); },
@@ -115,54 +115,47 @@ int main() {
     std::vector<Variable*> space_vars {&u, &v, &p, &rho};
     auto dt = DT(&mesh, UpdatePolicies::CourantFriedrichsLewy, CFL, space_vars);
 
-    auto aa =  rho.dy();
-    auto qq = aa.evaluate();
-    std::cout << qq << std::endl;
+    std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
+            {&rho,        '=', mass / mesh._volumes},
+            {&u,          '=', rho_u / rho / mesh._volumes},
+            {&v,          '=', rho_v / rho / mesh._volumes},
+            {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
 
-//    std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
-//            {&rho,        '=', mass / mesh._volumes},
-//            {&u,          '=', rho_u / rho / mesh._volumes},
-//            {&v,          '=', rho_v / rho / mesh._volumes},
-//            {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
-//
-//            {&rho_t_h,    '=', rho - 0.5 * dt * (u * rho.dx() + rho * u.dx() + v * rho.dy() + rho * v.dy())},
-//            {&u_t_h,      '=', u - 0.5 * dt * (u * u.dx() + v * u.dy() + (1 / rho) * p.dx())},
-//            {&v_t_h,      '=', v - 0.5 * dt * (u * v.dx() + v * v.dy() + (1 / rho) * p.dy())},
-//            {&p_t_h,      '=', p - 0.5 * dt * (gamma * p * (u.dx() + v.dy()) + u * p.dx() + v * p.dy())},
-//
-//            {&rho,        '=', rho_t_h},
-//            {&u,          '=', u_t_h},
-//            {&v,          '=', v_t_h},
-//            {&p,          '=', p_t_h},
-//
-//            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - (stab_x(rho) + stab_y(rho)))},
-//            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - (stab_x(rho * u) + stab_y(rho * u)))},
-//            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - (stab_x(rho * v) + stab_y(rho * v)))},
-//            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - (stab_x(E) + stab_y(E)))},
-//
-//            {&rho,        '=', mass / mesh._volumes},
-//            {&u,          '=', rho_u / rho / mesh._volumes},
-//            {&v,          '=', rho_v / rho / mesh._volumes},
-//            {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
-//    };
-//
-//    auto equation = Equation(timesteps);
-//
-//    std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
-//    equation.evaluate(all_vars, equation_system, &dt);
+            {&rho_t_h,    '=', rho - 0.5 * dt * (u * rho.dx() + rho * u.dx() + v * rho.dy() + rho * v.dy())},
+            {&u_t_h,      '=', u - 0.5 * dt * (u * u.dx() + v * u.dy() + (1 / rho) * p.dx())},
+            {&v_t_h,      '=', v - 0.5 * dt * (u * v.dx() + v * v.dy() + (1 / rho) * p.dy())},
+            {&p_t_h,      '=', p - 0.5 * dt * (gamma * p * (u.dx() + v.dy()) + u * p.dx() + v * p.dy())},
 
-//    auto fig = matplot::figure(true);
-//    for (auto& hist : rho.history) {
-//        auto grid_hist = to_grid(&mesh, hist);
-//        std::cout << grid_hist << std::endl << std::endl;
-//        auto vect = from_eigen_matrix<double>(grid_hist);
-//        fig->current_axes()->clear();
-//        fig->current_axes()->image(vect);
-//        fig->draw();
-//        std::this_thread::sleep_for(std::chrono::milliseconds {400});
-//    }
+            {&rho,        '=', rho_t_h * 1},
+            {&u,          '=', u_t_h * 1},
+            {&v,          '=', v_t_h * 1},
+            {&p,          '=', p_t_h * 1},
 
+            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - (stab_x(rho) + stab_y(rho)))},
+            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - (stab_x(rho * u) + stab_y(rho * u)))},
+            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - (stab_x(rho * v) + stab_y(rho * v)))},
+            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - (stab_x(E) + stab_y(E)))},
 
+            {&rho,        '=', mass / mesh._volumes},
+            {&u,          '=', rho_u / rho / mesh._volumes},
+            {&v,          '=', rho_v / rho / mesh._volumes},
+            {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
+    };
+
+    auto equation = Equation(timesteps);
+
+    std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
+    equation.evaluate(all_vars, equation_system, &dt);
+
+    auto fig = matplot::figure(true);
+    for (auto& hist : rho.history) {
+        auto grid_hist = to_grid(&mesh, hist);
+        std::cout << grid_hist << std::endl << std::endl;
+        auto vect = from_eigen_matrix<double>(grid_hist);
+        fig->current_axes()->image(vect);
+        fig->draw();
+        std::this_thread::sleep_for(std::chrono::milliseconds {100});
+    }
 
     return 0;
 }

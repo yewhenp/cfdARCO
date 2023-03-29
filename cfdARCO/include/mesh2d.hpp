@@ -3,11 +3,17 @@
 
 #include "abstract_mesh.hpp"
 #include <unordered_map>
+#include <memory>
+
 
 class Vertex2D;
 class Edge2D;
 class Quadrangle2D;
 class Mesh2D;
+
+using PtrVertex2D = std::shared_ptr<Vertex2D>;
+using PtrEdge2D = std::shared_ptr<Edge2D>;
+using PtrQuadrangle2D = std::shared_ptr<Quadrangle2D>;
 
 
 class Vertex2D : AbstractVertex {
@@ -74,9 +80,9 @@ public:
     double _ly;
     double _dx;
     double _dy;
-    std::vector<Vertex2D> _vertexes{};
-    std::vector<Edge2D> _edges{};
-    std::vector<Quadrangle2D> _nodes{};
+    std::vector<std::shared_ptr<Vertex2D>> _vertexes{};
+    std::vector<std::shared_ptr<Edge2D>> _edges{};
+    std::vector<std::shared_ptr<Quadrangle2D>> _nodes{};
     Eigen::VectorXd _volumes{};
     Eigen::MatrixX4d _normal_x{};
     Eigen::MatrixX4d _normal_y{};

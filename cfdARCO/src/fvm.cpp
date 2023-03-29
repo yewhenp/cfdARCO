@@ -154,32 +154,34 @@ void Variable::add_history() {
 
 Eigen::MatrixXd Variable::estimate_grads() {
     auto ret = Eigen::Matrix<double, -1, 2> { num_nodes, 2};
-    std::cout << current << std::endl << "aaa" << std::endl;
+    ret.setConstant(0);
 
     for (int i = 0; i < num_nodes; ++i) {
         auto& node = mesh->_nodes.at(i);
         auto summ = Eigen::Matrix<double, 1, 2>{};
-        for (int j = 0; j < node._edges_id.size(); ++j) {
-            auto edge_id = node._edges_id.at(j);
+        summ.setConstant(0);
+        for (int j = 0; j < node->_edges_id.size(); ++j) {
+            auto edge_id = node->_edges_id.at(j);
             auto& edge = mesh->_edges.at(edge_id);
 
-            Quadrangle2D& n1 = node, n2 = node;
-            if (edge._nodes_id.size() > 1) {
-                auto& n1_ = mesh->_nodes.at(edge._nodes_id.at(0));
-                auto& n2_ = mesh->_nodes.at(edge._nodes_id.at(1));
-                if (n1_._id == i) {
+            auto& n1 = node, n2 = node;
+            if (edge->_nodes_id.size() > 1) {
+                auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
+                auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
+                if (n1_->_id == node->_id) {
                     n2 = n2_;
                 } else {
                     n2 = n1_;
                 }
             }
 
-            auto fi = (current(n1._id) + current(n2._id)) / 2;
-            summ = summ + (n1._normals.block<1, 2>(j, 0) * fi);
-        }
-        ret.block<1, 2>(i, 0) += summ;
-    }
+            auto fi = (current(n1->_id) + current(n2->_id)) / 2;
 
+            auto summable = (n1->_normals.block<1, 2>(j, 0) * fi);
+            summ = summ + summable;
+        }
+        ret.block<1, 2>(i, 0) += summ / node->_volume;
+    }
     return ret;
 }
 
@@ -208,26 +210,26 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> Variable::get_inte
     for (int i = 0; i < num_nodes; ++i) {
         auto& node = mesh->_nodes.at(i);
 
-        for (int j = 0; j < node._edges_id.size(); ++j) {
-            auto edge_id = node._edges_id.at(j);
+        for (int j = 0; j < node->_edges_id.size(); ++j) {
+            auto edge_id = node->_edges_id.at(j);
             auto& edge = mesh->_edges.at(edge_id);
 
-            Quadrangle2D& n1 = node, n2 = node;
-            if (edge._nodes_id.size() > 1) {
-                auto& n1_ = mesh->_nodes.at(edge._nodes_id.at(0));
-                auto& n2_ = mesh->_nodes.at(edge._nodes_id.at(1));
-                if (n1_._id == i) {
+            auto& n1 = node, n2 = node;
+            if (edge->_nodes_id.size() > 1) {
+                auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
+                auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
+                if (n1_->_id == i) {
                     n2 = n2_;
                 } else {
                     n2 = n1_;
                 }
             }
 
-            auto n1_to_mid = n1._vectors_in_edges_directions.block<1, 2>(j, 0);
-            auto n2_to_mid = n2._vectors_in_edges_directions_by_id.at(edge_id);
+            auto n1_to_mid = n1->_vectors_in_edges_directions.block<1, 2>(j, 0);
+            auto n2_to_mid = n2->_vectors_in_edges_directions_by_id.at(edge_id);
 
-            auto fi_n1 =  grads.block<1, 2>(n1._id, 0).dot(n1_to_mid) + current(n1._id);
-            auto fi_n2 =  grads.block<1, 2>(n2._id, 0).dot(n2_to_mid) + current(n2._id);
+            auto fi_n1 =  grads.block<1, 2>(n1->_id, 0).dot(n1_to_mid) + current(n1->_id);
+            auto fi_n2 =  grads.block<1, 2>(n2->_id, 0).dot(n2_to_mid) + current(n2->_id);
 
             ret_sum(i, j) = (fi_n1 + fi_n2) / 2;
 
@@ -391,7 +393,7 @@ double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Variable *>
     auto gamma = 5. / 3.;
 //    auto l = space_vars.at(5);
 
-    auto dl = 0.01;
+    double dl = 1. / 100.;
     auto denom = dl * (((gamma * p->current.array()).cwiseQuotient(rho->current.array())).cwiseSqrt() + (u->current.array() * u->current.array() + v->current.array() * v->current.array()).cwiseSqrt()).cwiseInverse();
 
     auto dt = CFL * denom.minCoeff();
@@ -489,6 +491,9 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
             indicators::option::Lead{">"},
             indicators::option::Remainder{" "},
             indicators::option::End{"]"},
+            indicators::option::PostfixText{"0.0 %"},
+            indicators::option::ShowElapsedTime{true},
+            indicators::option::ShowRemainingTime{true},
             indicators::option::ForegroundColor{indicators::Color::green},
             indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
     };
@@ -515,14 +520,17 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
 
         double progress = (static_cast<double>(t) / static_cast<double>(timesteps)) * 100;
         bar.set_progress(static_cast<size_t>(progress));
+        bar.set_option(indicators::option::PostfixText{std::to_string(progress) + " %"});
     }
 }
 
 Eigen::MatrixXd to_grid(Mesh2D* mesh, Eigen::VectorXd& values) {
     Eigen::MatrixXd result = {mesh->_x, mesh->_y};
     for (auto& node : mesh->_nodes) {
-        double value = values(node._id);
-        result(static_cast<int>(node.x()), static_cast<int>(node.y())) = value;
+        double value = values(node->_id);
+        size_t x_coord = node->_id / mesh->_x;
+        size_t y_coord = node->_id % mesh->_x;
+        result(x_coord, y_coord) = value;
     }
     return result;
 }
