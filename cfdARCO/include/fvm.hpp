@@ -55,6 +55,10 @@ public:
     std::shared_ptr<Variable> right_operand = nullptr;
     std::function<Eigen::MatrixXd(Eigen::MatrixXd&, Eigen::MatrixXd&)> op;
 
+//    cache
+    bool estimate_grid_cache_valid = false;
+    Eigen::MatrixXd estimate_grid_cache;
+
     Variable operator+(const Variable & obj_r) const;
     Variable operator-(const Variable & obj_r) const;
     Variable operator*(const Variable & obj_r) const;

@@ -145,7 +145,11 @@ int main() {
     auto equation = Equation(timesteps);
 
     std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
+
+    auto begin = std::chrono::steady_clock::now();
     equation.evaluate(all_vars, equation_system, &dt);
+    auto end = std::chrono::steady_clock::now();
+    std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
     auto fig = matplot::figure(true);
     for (auto& hist : rho.history) {

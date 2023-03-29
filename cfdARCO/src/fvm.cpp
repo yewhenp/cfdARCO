@@ -153,36 +153,50 @@ void Variable::add_history() {
 }
 
 Eigen::MatrixXd Variable::estimate_grads() {
-    auto ret = Eigen::Matrix<double, -1, 2> { num_nodes, 2};
-    ret.setConstant(0);
+    if (estimate_grid_cache_valid) {
+        return estimate_grid_cache;
+    }
+
+    estimate_grid_cache = Eigen::Matrix<double, -1, 2> { num_nodes, 2};
+    estimate_grid_cache.setConstant(0);
+    auto pre_ret = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
 
     for (int i = 0; i < num_nodes; ++i) {
         auto& node = mesh->_nodes.at(i);
-        auto summ = Eigen::Matrix<double, 1, 2>{};
-        summ.setConstant(0);
         for (int j = 0; j < node->_edges_id.size(); ++j) {
             auto edge_id = node->_edges_id.at(j);
             auto& edge = mesh->_edges.at(edge_id);
 
-            auto& n1 = node, n2 = node;
+            auto n1_id = i, n2_id = i;
             if (edge->_nodes_id.size() > 1) {
                 auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
                 auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
-                if (n1_->_id == node->_id) {
-                    n2 = n2_;
+                if (n1_->_id == i) {
+                    n2_id = n2_->_id;
                 } else {
-                    n2 = n1_;
+                    n2_id = n1_->_id;
                 }
             }
 
-            auto fi = (current(n1->_id) + current(n2->_id)) / 2;
-
-            auto summable = (n1->_normals.block<1, 2>(j, 0) * fi);
-            summ = summ + summable;
+            auto fi = (current(n1_id) + current(n2_id)) / 2;
+            pre_ret(i, j) = fi;
         }
-        ret.block<1, 2>(i, 0) += summ / node->_volume;
     }
-    return ret;
+
+    Eigen::MatrixXd pre_ret_x = pre_ret.cwiseProduct(mesh->_normal_x);
+    Eigen::MatrixXd pre_ret_y = pre_ret.cwiseProduct(mesh->_normal_y);
+
+    Eigen::Matrix<double, -1, 1> grad_x = pre_ret_x.rowwise().sum();
+    Eigen::Matrix<double, -1, 1> grad_y = pre_ret_y.rowwise().sum();
+
+    grad_x = grad_x.cwiseQuotient(mesh->_volumes);
+    grad_y = grad_y.cwiseQuotient(mesh->_volumes);
+
+    estimate_grid_cache.col(0) = grad_x;
+    estimate_grid_cache.col(1) = grad_y;
+    estimate_grid_cache_valid = true;
+
+    return estimate_grid_cache;
 }
 
 _GradEstimated Variable::dx() {
@@ -201,11 +215,18 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> Variable::get_inte
         return {op(left_eval1, right_eval1), op(left_eval2, right_eval2), op(left_eval3, right_eval3)};
     }
 
-
     auto grads = estimate_grads();
+    auto grads_self_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto grads_self_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto grads_neigh_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto grads_neigh_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto cur_self = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto cur_neigh = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+
     auto ret_sum = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
     auto ret_r = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
     auto ret_l = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+
 
     for (int i = 0; i < num_nodes; ++i) {
         auto& node = mesh->_nodes.at(i);
@@ -214,40 +235,44 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> Variable::get_inte
             auto edge_id = node->_edges_id.at(j);
             auto& edge = mesh->_edges.at(edge_id);
 
-            auto& n1 = node, n2 = node;
+            auto& n1_id = i, n2_id = i;
             if (edge->_nodes_id.size() > 1) {
                 auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
                 auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
                 if (n1_->_id == i) {
-                    n2 = n2_;
+                    n2_id = n2_->_id;
                 } else {
-                    n2 = n1_;
+                    n2_id = n1_->_id;
                 }
             }
-
-            auto n1_to_mid = n1->_vectors_in_edges_directions.block<1, 2>(j, 0);
-            auto n2_to_mid = n2->_vectors_in_edges_directions_by_id.at(edge_id);
-
-            auto fi_n1 =  grads.block<1, 2>(n1->_id, 0).dot(n1_to_mid) + current(n1->_id);
-            auto fi_n2 =  grads.block<1, 2>(n2->_id, 0).dot(n2_to_mid) + current(n2->_id);
-
-            ret_sum(i, j) = (fi_n1 + fi_n2) / 2;
-
-            if (j == 0) {
-                ret_r(i, j) = fi_n2;
-                ret_l(i, j) = fi_n1;
-            } else if (j == 1) {
-                ret_r(i, j) = fi_n1;
-                ret_l(i, j) = fi_n2;
-            } else if (j == 2) {
-                ret_r(i, j) = fi_n1;
-                ret_l(i, j) = fi_n2;
-            } else {
-                ret_r(i, j) = fi_n2;
-                ret_l(i, j) = fi_n1;
-            }
+            grads_self_x(i, j) = grads(n1_id, 0);
+            grads_self_y(i, j) = grads(n1_id, 1);
+            grads_neigh_x(i, j) = grads(n2_id, 0);
+            grads_neigh_y(i, j) = grads(n2_id, 1);
+            cur_self(i, j) = current(n1_id);
+            cur_neigh(i, j) = current(n2_id);
         }
     }
+
+    grads_self_x = grads_self_x.cwiseProduct(mesh->_vec_in_edge_direction_x);
+    grads_self_y = grads_self_y.cwiseProduct(mesh->_vec_in_edge_direction_y);
+    grads_neigh_x = grads_neigh_x.cwiseProduct(mesh->_vec_in_edge_neigh_direction_x);
+    grads_neigh_y = grads_neigh_y.cwiseProduct(mesh->_vec_in_edge_neigh_direction_y);
+
+    auto val_self = grads_self_x + grads_self_y + cur_self;
+    auto val_neigh = grads_neigh_x + grads_neigh_y + cur_neigh;
+
+    ret_sum = (val_self + val_neigh) / 2;
+
+    ret_r.col(0) = val_neigh.col(0);
+    ret_r.col(1) = val_self.col(1);
+    ret_r.col(2) = val_self.col(2);
+    ret_r.col(3) = val_neigh.col(3);
+
+    ret_l.col(0) = val_self.col(0);
+    ret_l.col(1) = val_neigh.col(1);
+    ret_l.col(2) = val_neigh.col(2);
+    ret_l.col(3) = val_self.col(3);
 
     return {ret_sum, ret_r, ret_l};
 }
@@ -268,6 +293,7 @@ Eigen::MatrixXd Variable::evaluate() {
 
 void Variable::set_current(Eigen::VectorXd &current_) {
     current = current_;
+    estimate_grid_cache_valid = false;
 }
 
 std::vector<Eigen::VectorXd> Variable::get_history() {

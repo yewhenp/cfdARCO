@@ -109,12 +109,39 @@ void Mesh2D::compute() {
 
     _normal_x = Eigen::MatrixX4d {_num_nodes, 4};
     _normal_y = Eigen::MatrixX4d {_num_nodes, 4};
+    _vec_in_edge_direction_x = Eigen::MatrixX4d {_num_nodes, 4};
+    _vec_in_edge_direction_y = Eigen::MatrixX4d {_num_nodes, 4};
+    _vec_in_edge_neigh_direction_x = Eigen::MatrixX4d {_num_nodes, 4};
+    _vec_in_edge_neigh_direction_y = Eigen::MatrixX4d {_num_nodes, 4};
     for (size_t i = 0; i < _num_nodes; ++i) {
         auto& node = _nodes.at(i);
         Eigen::Vector4d norm_v_x {node->_normals.block<4, 1>(0, 0)};
         Eigen::Vector4d norm_v_y {node->_normals.block<4, 1>(0, 1)};
         _normal_x.block<1, 4>(node->_id, 0) = norm_v_x;
         _normal_y.block<1, 4>(node->_id, 0) = norm_v_y;
+
+        for (int j = 0; j < node->_edges_id.size(); ++j) {
+            auto edge_id = node->_edges_id.at(j);
+            auto& edge = _edges.at(edge_id);
+
+            auto& n1 = node, n2 = node;
+            if (edge->_nodes_id.size() > 1) {
+                auto& n1_ = _nodes.at(edge->_nodes_id.at(0));
+                auto& n2_ = _nodes.at(edge->_nodes_id.at(1));
+                if (n1_->_id == i) {
+                    n2 = n2_;
+                } else {
+                    n2 = n1_;
+                }
+            }
+
+            _vec_in_edge_direction_x(node->_id, j) = n1->_vectors_in_edges_directions(j, 0);
+            _vec_in_edge_direction_y(node->_id, j) = n1->_vectors_in_edges_directions(j, 1);
+            _vec_in_edge_neigh_direction_x(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 0);
+            _vec_in_edge_neigh_direction_y(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 1);
+
+            _n2_ids.push_back(n2->_id);
+        }
     }
 }
 
