@@ -151,14 +151,14 @@ int main() {
     auto end = std::chrono::steady_clock::now();
     std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
-    auto fig = matplot::figure(true);
-    for (auto& hist : rho.history) {
-        auto grid_hist = to_grid(&mesh, hist);
-        auto vect = from_eigen_matrix<double>(grid_hist);
-        fig->current_axes()->image(vect);
-        fig->draw();
-        std::this_thread::sleep_for(std::chrono::milliseconds {100});
-    }
+//    auto fig = matplot::figure(true);
+//    for (auto& hist : rho.history) {
+//        auto grid_hist = to_grid(&mesh, hist);
+//        auto vect = from_eigen_matrix<double>(grid_hist);
+//        fig->current_axes()->image(vect);
+//        fig->draw();
+//        std::this_thread::sleep_for(std::chrono::milliseconds {100});
+//    }
 
     return 0;
 }

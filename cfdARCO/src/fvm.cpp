@@ -161,26 +161,9 @@ Eigen::MatrixXd Variable::estimate_grads() {
     estimate_grid_cache.setConstant(0);
     auto pre_ret = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
 
-    for (int i = 0; i < num_nodes; ++i) {
-        auto& node = mesh->_nodes.at(i);
-        for (int j = 0; j < node->_edges_id.size(); ++j) {
-            auto edge_id = node->_edges_id.at(j);
-            auto& edge = mesh->_edges.at(edge_id);
-
-            auto n1_id = i, n2_id = i;
-            if (edge->_nodes_id.size() > 1) {
-                auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
-                auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
-                if (n1_->_id == i) {
-                    n2_id = n2_->_id;
-                } else {
-                    n2_id = n1_->_id;
-                }
-            }
-
-            auto fi = (current(n1_id) + current(n2_id)) / 2;
-            pre_ret(i, j) = fi;
-        }
+    for (int j = 0; j < 4; ++j) {
+        auto current_n2 = current(mesh->_n2_ids[j]);
+        pre_ret.col(j) = (current + current_n2) / 2;
     }
 
     Eigen::MatrixXd pre_ret_x = pre_ret.cwiseProduct(mesh->_normal_x);
@@ -228,30 +211,42 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> Variable::get_inte
     auto ret_l = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
 
 
-    for (int i = 0; i < num_nodes; ++i) {
-        auto& node = mesh->_nodes.at(i);
+//    for (int i = 0; i < num_nodes; ++i) {
+//        auto& node = mesh->_nodes.at(i);
+//
+//        for (int j = 0; j < node->_edges_id.size(); ++j) {
+//            auto edge_id = node->_edges_id.at(j);
+//            auto& edge = mesh->_edges.at(edge_id);
+//
+//            auto& n1_id = i, n2_id = i;
+//            if (edge->_nodes_id.size() > 1) {
+//                auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
+//                auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
+//                if (n1_->_id == i) {
+//                    n2_id = n2_->_id;
+//                } else {
+//                    n2_id = n1_->_id;
+//                }
+//            }
+//            grads_self_x(i, j) = grads(n1_id, 0);
+//            grads_self_y(i, j) = grads(n1_id, 1);
+//            grads_neigh_x(i, j) = grads(n2_id, 0);
+//            grads_neigh_y(i, j) = grads(n2_id, 1);
+//            cur_self(i, j) = current(n1_id);
+//            cur_neigh(i, j) = current(n2_id);
+//        }
+//    }
 
-        for (int j = 0; j < node->_edges_id.size(); ++j) {
-            auto edge_id = node->_edges_id.at(j);
-            auto& edge = mesh->_edges.at(edge_id);
+    for (int j = 0; j < 4; ++j) {
+        auto grads_n2 = grads( mesh->_n2_ids[j], Eigen::all);
+        auto current_n2 = current( mesh->_n2_ids[j]);
 
-            auto& n1_id = i, n2_id = i;
-            if (edge->_nodes_id.size() > 1) {
-                auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
-                auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
-                if (n1_->_id == i) {
-                    n2_id = n2_->_id;
-                } else {
-                    n2_id = n1_->_id;
-                }
-            }
-            grads_self_x(i, j) = grads(n1_id, 0);
-            grads_self_y(i, j) = grads(n1_id, 1);
-            grads_neigh_x(i, j) = grads(n2_id, 0);
-            grads_neigh_y(i, j) = grads(n2_id, 1);
-            cur_self(i, j) = current(n1_id);
-            cur_neigh(i, j) = current(n2_id);
-        }
+        grads_self_x.col(j) = grads.col(0);
+        grads_self_y.col(j) = grads.col(1);
+        grads_neigh_x.col(j) = grads_n2.col(0);
+        grads_neigh_y.col(j) = grads_n2.col(1);
+        cur_self.col(j) = current;
+        cur_neigh.col(j) = current_n2;
     }
 
     grads_self_x = grads_self_x.cwiseProduct(mesh->_vec_in_edge_direction_x);

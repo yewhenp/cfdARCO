@@ -90,7 +90,7 @@ public:
     Eigen::MatrixX4d _vec_in_edge_direction_y{};
     Eigen::MatrixX4d _vec_in_edge_neigh_direction_x{};
     Eigen::MatrixX4d _vec_in_edge_neigh_direction_y{};
-    std::vector<int> _n2_ids{};
+    std::vector<std::vector<int>> _n2_ids{};
 
 };
 
