@@ -46,8 +46,8 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 
 
 int main() {
-    size_t L = 100;
-    size_t timesteps = 1000;
+    size_t L = 10;
+    size_t timesteps = 100;
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
@@ -150,7 +150,6 @@ int main() {
     auto fig = matplot::figure(true);
     for (auto& hist : rho.history) {
         auto grid_hist = to_grid(&mesh, hist);
-        std::cout << grid_hist << std::endl << std::endl;
         auto vect = from_eigen_matrix<double>(grid_hist);
         fig->current_axes()->image(vect);
         fig->draw();

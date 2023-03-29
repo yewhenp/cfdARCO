@@ -385,15 +385,13 @@ Eigen::MatrixXd _GradEstimated::evaluate() {
 }
 
 // TODO: think about general interface
-double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Variable *> &space_vars) {
+double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Variable *> &space_vars, Mesh2D* mesh) {
     auto u = space_vars.at(0);
     auto v = space_vars.at(1);
     auto p = space_vars.at(2);
     auto rho = space_vars.at(3);
     auto gamma = 5. / 3.;
-//    auto l = space_vars.at(5);
-
-    double dl = 1. / 100.;
+    double dl = std::min(mesh->_dx, mesh->_dy);
     auto denom = dl * (((gamma * p->current.array()).cwiseQuotient(rho->current.array())).cwiseSqrt() + (u->current.array() * u->current.array() + v->current.array() * v->current.array()).cwiseSqrt()).cwiseInverse();
 
     auto dt = CFL * denom.minCoeff();
@@ -401,14 +399,14 @@ double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Variable *>
     return dt;
 }
 
-DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable *> &)> update_fn_, double CFL_, std::vector<Variable *> &space_vars_) : update_fn{update_fn_}, CFL{CFL_}, space_vars{space_vars_} {
+DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable *> &, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable *> &space_vars_) : update_fn{update_fn_}, CFL{CFL_}, space_vars{space_vars_} {
     name = "dt";
     mesh = mesh_;
     _dt = 0;
 }
 
 void DT::update() {
-    _dt = update_fn(CFL, space_vars);
+    _dt = update_fn(CFL, space_vars, mesh);
 }
 
 Eigen::MatrixXd DT::evaluate() {
