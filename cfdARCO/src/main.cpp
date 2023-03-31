@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
 #include <iostream>
 #include <matplot/matplot.h>
 #include <chrono>
@@ -44,10 +47,11 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
     return arr;
 }
 
-
 int main() {
-    size_t L = 10;
-    size_t timesteps = 100;
+    bool visualize = 1;
+
+    size_t L = 100;
+    size_t timesteps = 1000;
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
@@ -83,7 +87,7 @@ int main() {
     Eigen::VectorXd zeros = Eigen::VectorXd{mesh._num_nodes};
     zeros.setConstant(0.0);
     auto rho_t_h = Variable(&mesh, zeros, boundary_none, "rho_t_h");
-    auto u_t_h = Variable(&mesh, zeros, boundary_none, "u_t_h");
+    auto u_t_h = Variable(&mesh,zeros, boundary_none, "u_t_h");
     auto v_t_h = Variable(&mesh, zeros, boundary_none, "v_t_h");
     auto p_t_h = Variable(&mesh, zeros, boundary_none, "p_t_h");
 
@@ -147,18 +151,25 @@ int main() {
     std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
 
     auto begin = std::chrono::steady_clock::now();
-    equation.evaluate(all_vars, equation_system, &dt);
+    equation.evaluate(all_vars, equation_system, &dt, visualize);
     auto end = std::chrono::steady_clock::now();
     std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
-//    auto fig = matplot::figure(true);
-//    for (auto& hist : rho.history) {
-//        auto grid_hist = to_grid(&mesh, hist);
-//        auto vect = from_eigen_matrix<double>(grid_hist);
-//        fig->current_axes()->image(vect);
-//        fig->draw();
-//        std::this_thread::sleep_for(std::chrono::milliseconds {100});
-//    }
+    if (visualize) {
+        auto fig = matplot::figure(true);
+        size_t ii = 0;
+        for (auto& hist : rho.history) {
+            ii += 1;
+            if (ii % 10 != 0) {
+                continue;
+            }
+            auto grid_hist = to_grid(&mesh, hist);
+            auto vect = from_eigen_matrix<double>(grid_hist);
+            fig->current_axes()->image(vect);
+            fig->draw();
+            std::this_thread::sleep_for(std::chrono::milliseconds {100});
+        }
+    }
 
     return 0;
 }

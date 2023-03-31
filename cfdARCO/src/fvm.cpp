@@ -1,3 +1,7 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
+
 #include "fvm.hpp"
 
 #include <utility>
@@ -105,9 +109,6 @@ std::shared_ptr<Variable> _GradEstimated::clone() const {
 }
 
 std::shared_ptr<Variable> DT::clone() const {
-//    auto* new_obj = new DT(*this);
-//    return new_obj;
-//    return (Variable *) this;
     return std::shared_ptr<Variable>{const_cast<DT*>(this), [](Variable *) {}};
 }
 
@@ -125,23 +126,6 @@ std::shared_ptr<Variable> _Stab::clone() const  {
     auto* new_obj = new _Stab(*this);
     return std::shared_ptr<Variable>{new_obj};
 }
-
-
-//Variable::Variable(const Variable & var) {
-//    name = var.name;
-//    mesh = var.mesh;
-//    current = var.current;
-//    boundary_conditions = var.boundary_conditions;
-//    history = var.history;
-//    num_nodes = var.num_nodes;
-//    is_subvariable = var.is_subvariable;
-//    is_constvar = var.is_constvar;
-//    op = var.op;
-//
-//    if (var.left_operand != nullptr) {
-//        left_operand =
-//    }
-//}
 
 
 void Variable::set_bound() {
@@ -166,17 +150,17 @@ Eigen::MatrixXd Variable::estimate_grads() {
         pre_ret.col(j) = (current + current_n2) / 2;
     }
 
-    Eigen::MatrixXd pre_ret_x = pre_ret.cwiseProduct(mesh->_normal_x);
-    Eigen::MatrixXd pre_ret_y = pre_ret.cwiseProduct(mesh->_normal_y);
+    auto pre_ret_x = pre_ret.cwiseProduct(mesh->_normal_x);
+    auto pre_ret_y = pre_ret.cwiseProduct(mesh->_normal_y);
 
-    Eigen::Matrix<double, -1, 1> grad_x = pre_ret_x.rowwise().sum();
-    Eigen::Matrix<double, -1, 1> grad_y = pre_ret_y.rowwise().sum();
+    auto grad_x = pre_ret_x.rowwise().sum();
+    auto grad_y = pre_ret_y.rowwise().sum();
 
-    grad_x = grad_x.cwiseQuotient(mesh->_volumes);
-    grad_y = grad_y.cwiseQuotient(mesh->_volumes);
+    auto grad_xd = grad_x.cwiseQuotient(mesh->_volumes);
+    auto grad_yd = grad_y.cwiseQuotient(mesh->_volumes);
 
-    estimate_grid_cache.col(0) = grad_x;
-    estimate_grid_cache.col(1) = grad_y;
+    estimate_grid_cache.col(0) = grad_xd;
+    estimate_grid_cache.col(1) = grad_yd;
     estimate_grid_cache_valid = true;
 
     return estimate_grid_cache;
@@ -206,36 +190,8 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> Variable::get_inte
     auto cur_self = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
     auto cur_neigh = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
 
-    auto ret_sum = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
     auto ret_r = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
     auto ret_l = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-
-
-//    for (int i = 0; i < num_nodes; ++i) {
-//        auto& node = mesh->_nodes.at(i);
-//
-//        for (int j = 0; j < node->_edges_id.size(); ++j) {
-//            auto edge_id = node->_edges_id.at(j);
-//            auto& edge = mesh->_edges.at(edge_id);
-//
-//            auto& n1_id = i, n2_id = i;
-//            if (edge->_nodes_id.size() > 1) {
-//                auto& n1_ = mesh->_nodes.at(edge->_nodes_id.at(0));
-//                auto& n2_ = mesh->_nodes.at(edge->_nodes_id.at(1));
-//                if (n1_->_id == i) {
-//                    n2_id = n2_->_id;
-//                } else {
-//                    n2_id = n1_->_id;
-//                }
-//            }
-//            grads_self_x(i, j) = grads(n1_id, 0);
-//            grads_self_y(i, j) = grads(n1_id, 1);
-//            grads_neigh_x(i, j) = grads(n2_id, 0);
-//            grads_neigh_y(i, j) = grads(n2_id, 1);
-//            cur_self(i, j) = current(n1_id);
-//            cur_neigh(i, j) = current(n2_id);
-//        }
-//    }
 
     for (int j = 0; j < 4; ++j) {
         auto grads_n2 = grads( mesh->_n2_ids[j], Eigen::all);
@@ -249,15 +205,15 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> Variable::get_inte
         cur_neigh.col(j) = current_n2;
     }
 
-    grads_self_x = grads_self_x.cwiseProduct(mesh->_vec_in_edge_direction_x);
-    grads_self_y = grads_self_y.cwiseProduct(mesh->_vec_in_edge_direction_y);
-    grads_neigh_x = grads_neigh_x.cwiseProduct(mesh->_vec_in_edge_neigh_direction_x);
-    grads_neigh_y = grads_neigh_y.cwiseProduct(mesh->_vec_in_edge_neigh_direction_y);
+    auto grads_self_xd = grads_self_x.cwiseProduct(mesh->_vec_in_edge_direction_x);
+    auto grads_self_yd = grads_self_y.cwiseProduct(mesh->_vec_in_edge_direction_y);
+    auto grads_neigh_xd = grads_neigh_x.cwiseProduct(mesh->_vec_in_edge_neigh_direction_x);
+    auto grads_neigh_yd = grads_neigh_y.cwiseProduct(mesh->_vec_in_edge_neigh_direction_y);
 
-    auto val_self = grads_self_x + grads_self_y + cur_self;
-    auto val_neigh = grads_neigh_x + grads_neigh_y + cur_neigh;
+    auto val_self = (grads_self_xd + grads_self_yd + cur_self).eval();
+    auto val_neigh = (grads_neigh_xd + grads_neigh_yd + cur_neigh).eval();
 
-    ret_sum = (val_self + val_neigh) / 2;
+    auto ret_sum = (val_self + val_neigh) / 2;
 
     ret_r.col(0) = val_neigh.col(0);
     ret_r.col(1) = val_self.col(1);
@@ -331,7 +287,7 @@ Variable Variable::operator-(const Variable &obj_r) const {
 Variable Variable::operator*(const Variable &obj_r) const {
     std::string name_ = "(" + this->name + "*" + obj_r.name + ")";
     auto [l_p, r_p] = get_that_vars(this, obj_r);
-    return {l_p, r_p, [](Eigen::MatrixXd& lft, Eigen::MatrixXd& rht){return lft.array() * rht.array();}, name_};
+    return {l_p, r_p, [](Eigen::MatrixXd& lft, Eigen::MatrixXd& rht){return lft.cwiseProduct(rht);}, name_};
 }
 
 Variable Variable::operator/(const Variable &obj_r) const {
@@ -403,6 +359,7 @@ Eigen::MatrixXd _GradEstimated::evaluate() {
     if (clc_y) {
         return grads.col(1);
     }
+    return Eigen::MatrixXd{};
 }
 
 // TODO: think about general interface
@@ -468,6 +425,7 @@ Eigen::MatrixXd _Grad::evaluate() {
     if (clc_y) {
         return res_y;
     }
+    return Eigen::MatrixXd{};
 }
 
 _Stab::_Stab(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
@@ -476,7 +434,7 @@ _Stab::_Stab(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{cl
 
 Eigen::MatrixXd _Stab::evaluate() {
     auto current_interface_gradients = var->get_interface_vars_first_order();
-    auto& current_interface_gradients_star = (std::get<2>(current_interface_gradients) - std::get<1>(current_interface_gradients)) / 2;
+    auto current_interface_gradients_star = (std::get<2>(current_interface_gradients) - std::get<1>(current_interface_gradients)) / 2;
 
     auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
     auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
@@ -490,6 +448,7 @@ Eigen::MatrixXd _Stab::evaluate() {
     if (clc_y) {
         return res_y;
     }
+    return Eigen::MatrixXd{};
 }
 
 void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_var, DT *dt) {
@@ -501,7 +460,7 @@ void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_va
 Equation::Equation(size_t timesteps_) : timesteps{timesteps_} {}
 
 void Equation::evaluate(std::vector<Variable*> &all_vars,
-                        std::vector<std::tuple<Variable*, char, Variable>> &equation_system, DT* dt) {
+                        std::vector<std::tuple<Variable*, char, Variable>> &equation_system, DT* dt, bool visualize) {
     double t_val = 0;
     indicators::ProgressBar bar{
             indicators::option::BarWidth{50},
@@ -537,9 +496,11 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
             var->add_history();
         }
 
-        double progress = (static_cast<double>(t) / static_cast<double>(timesteps)) * 100;
-        bar.set_progress(static_cast<size_t>(progress));
-        bar.set_option(indicators::option::PostfixText{std::to_string(progress) + " %"});
+        if (visualize) {
+            double progress = (static_cast<double>(t) / static_cast<double>(timesteps)) * 100;
+            bar.set_progress(static_cast<size_t>(progress));
+            bar.set_option(indicators::option::PostfixText{std::to_string(progress) + " %"});
+        }
     }
 }
 
