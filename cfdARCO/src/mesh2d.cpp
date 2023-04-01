@@ -111,10 +111,7 @@ void Mesh2D::compute() {
         _volumes_tot(node->_id) = node->_volume;
     }
 
-    for (int i = 0; i < 4; ++i) {
-        _n2_ids_tot.emplace_back();
-    }
-
+    _n2_ids_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
     _normal_x_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
     _normal_y_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
     _vec_in_edge_direction_x_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
@@ -148,7 +145,7 @@ void Mesh2D::compute() {
             _vec_in_edge_neigh_direction_x_tot(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 0);
             _vec_in_edge_neigh_direction_y_tot(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 1);
 
-            _n2_ids_tot[j].push_back(n2->_id);
+            _n2_ids_tot(n1->_id, j) = n2->_id;
         }
     }
 

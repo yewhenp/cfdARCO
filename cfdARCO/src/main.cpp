@@ -55,7 +55,7 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 int main(int argc, char **argv) {
     CFDArcoGlobalInit::initialize(argc, argv);
 
-    bool visualize = 1;
+    bool visualize = 0;
 
     size_t L = 100;
     size_t timesteps = 1000;

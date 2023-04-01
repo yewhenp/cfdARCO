@@ -2,6 +2,7 @@
 #define CFDARCO_FVM_HPP
 
 #include "mesh2d.hpp"
+#include "decls.hpp"
 #include <optional>
 #include <memory>
 
@@ -16,7 +17,7 @@ class Variable {
 public:
     Variable();
     Variable(Mesh2D* mesh_, Eigen::VectorXd& initial_, BoundaryFN boundary_conditions_, std::string name_="");
-    Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>(Eigen::Matrix<double, -1, -1, Eigen::RowMajor>&, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>&)> op_, std::string& name_);
+    Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<MatrixX4dRB(MatrixX4dRB&, MatrixX4dRB&)> op_, std::string& name_);
     Variable(Mesh2D* mesh_, double value);
     Variable(Eigen::VectorXd& curr_);
 
@@ -29,12 +30,12 @@ public:
 
     void set_bound();
     void add_history();
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> estimate_grads();
+    MatrixX4dRB estimate_grads();
     _GradEstimated dx();
     _GradEstimated dy();
-    std::tuple<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> get_interface_vars_first_order();
+    std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_first_order();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
-    virtual Eigen::Matrix<double, -1, -1, Eigen::RowMajor> evaluate();
+    virtual MatrixX4dRB evaluate();
     void set_current(Eigen::VectorXd& current_);
     std::vector<Eigen::VectorXd> get_history();
     virtual void solve(Variable* equation, DT* dt);
@@ -43,8 +44,8 @@ public:
     std::string name;
     Mesh2D *mesh = nullptr;
     Eigen::VectorXd current;
-    std::vector<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> current_redist;
-    std::vector<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> grad_redist;
+    std::vector<MatrixX4dRB> current_redist;
+    std::vector<MatrixX4dRB> grad_redist;
     BoundaryFN boundary_conditions;
     std::vector<Eigen::VectorXd> history {};
     size_t num_nodes = 0;
@@ -55,11 +56,11 @@ public:
 //    from subvariable
     std::shared_ptr<Variable> left_operand = nullptr;
     std::shared_ptr<Variable> right_operand = nullptr;
-    std::function<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>(Eigen::Matrix<double, -1, -1, Eigen::RowMajor>&, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>&)> op;
+    std::function<MatrixX4dRB(MatrixX4dRB&, MatrixX4dRB&)> op;
 
 //    cache
     bool estimate_grid_cache_valid = false;
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> estimate_grid_cache;
+    MatrixX4dRB estimate_grid_cache;
 
     Variable operator+(const Variable & obj_r) const;
     Variable operator-(const Variable & obj_r) const;
@@ -81,7 +82,7 @@ class _GradEstimated : public Variable {
 public:
     explicit _GradEstimated(Variable *var_, bool clc_x_=true, bool clc_y_=true);
 
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> evaluate() override;
+    MatrixX4dRB evaluate() override;
     std::shared_ptr<Variable> clone() const override;
 
     Variable* var;
@@ -100,7 +101,7 @@ class DT : public Variable {
 public:
     DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable*>&, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
     void update();
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> evaluate() override;
+    MatrixX4dRB evaluate() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::function<double(double, std::vector<Variable*>&, Mesh2D* mesh)> update_fn;
@@ -136,7 +137,7 @@ class _Grad : public Variable {
 public:
     _Grad(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> evaluate() override;
+    MatrixX4dRB evaluate() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::shared_ptr<Variable> var;
@@ -149,7 +150,7 @@ class _Stab : public Variable {
 public:
     _Stab(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> evaluate() override;
+    MatrixX4dRB evaluate() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::shared_ptr<Variable> var;
@@ -218,7 +219,7 @@ public:
 };
 
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> to_grid(Mesh2D* mesh, Eigen::VectorXd& values);
+MatrixX4dRB to_grid(Mesh2D* mesh, Eigen::VectorXd& values);
 
 template<typename Scalar, typename Matrix>
 inline static std::vector< std::vector<Scalar> > from_eigen_matrix( const Matrix & M ){

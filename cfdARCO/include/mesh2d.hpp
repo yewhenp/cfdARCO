@@ -2,6 +2,7 @@
 #define CFDARCO_MESH2D_HPP
 
 #include "abstract_mesh.hpp"
+#include "decls.hpp"
 #include <unordered_map>
 #include <memory>
 
@@ -86,22 +87,22 @@ public:
     std::vector<std::shared_ptr<Quadrangle2D>> _nodes_tot{};
     std::vector<std::shared_ptr<Quadrangle2D>> _nodes{};
     Eigen::VectorXd _volumes_tot{};
-    Eigen::MatrixX4d _normal_x_tot{};
-    Eigen::MatrixX4d _normal_y_tot{};
-    Eigen::MatrixX4d _vec_in_edge_direction_x_tot{};
-    Eigen::MatrixX4d _vec_in_edge_direction_y_tot{};
-    Eigen::MatrixX4d _vec_in_edge_neigh_direction_x_tot{};
-    Eigen::MatrixX4d _vec_in_edge_neigh_direction_y_tot{};
-    std::vector<std::vector<int>> _n2_ids_tot{};
+    MatrixX4dRB _normal_x_tot{};
+    MatrixX4dRB _normal_y_tot{};
+    MatrixX4dRB _vec_in_edge_direction_x_tot{};
+    MatrixX4dRB _vec_in_edge_direction_y_tot{};
+    MatrixX4dRB _vec_in_edge_neigh_direction_x_tot{};
+    MatrixX4dRB _vec_in_edge_neigh_direction_y_tot{};
+    MatrixX4dRB _n2_ids_tot{};
 
     Eigen::VectorXd _volumes{};
-    Eigen::MatrixX4d _normal_x{};
-    Eigen::MatrixX4d _normal_y{};
-    Eigen::MatrixX4d _vec_in_edge_direction_x{};
-    Eigen::MatrixX4d _vec_in_edge_direction_y{};
-    Eigen::MatrixX4d _vec_in_edge_neigh_direction_x{};
-    Eigen::MatrixX4d _vec_in_edge_neigh_direction_y{};
-    std::vector<std::vector<int>> _n2_ids{};
+    MatrixX4dRB _normal_x{};
+    MatrixX4dRB _normal_y{};
+    MatrixX4dRB _vec_in_edge_direction_x{};
+    MatrixX4dRB _vec_in_edge_direction_y{};
+    MatrixX4dRB _vec_in_edge_neigh_direction_x{};
+    MatrixX4dRB _vec_in_edge_neigh_direction_y{};
+    MatrixX4dRB _n2_ids{};
 
 };
 

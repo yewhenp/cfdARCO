@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <mesh2d.hpp>
+#include "decls.hpp"
 
 
 class CFDArcoGlobalInit {
@@ -10,8 +11,8 @@ public:
     static void initialize(int argc, char** argv);
     static void finalize();
     static void make_node_distribution(Mesh2D* _mesh);
-    static std::vector<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> get_redistributed(const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& inst, const std::string& name);
-    static Eigen::Matrix<double, -1, -1, Eigen::RowMajor> recombine(const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& inst, const std::string& name);
+    static std::vector<MatrixX4dRB> get_redistributed(const MatrixX4dRB& inst, const std::string& name);
+    static MatrixX4dRB recombine(const MatrixX4dRB& inst, const std::string& name);
     static inline int get_rank() { return world_rank; }
 
     CFDArcoGlobalInit(CFDArcoGlobalInit &other) = delete;

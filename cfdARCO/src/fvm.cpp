@@ -15,7 +15,7 @@ Variable::Variable(Mesh2D* mesh_, Eigen::VectorXd &initial_, BoundaryFN boundary
 }
 
 Variable::Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_,
-                   std::function<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>(Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &, Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &)> op_, std::string &name_) :
+                   std::function<MatrixX4dRB(MatrixX4dRB &, MatrixX4dRB &)> op_, std::string &name_) :
                     op{op_}, name{name_}  {
     num_nodes = 0;
     if (left_operand_->mesh != nullptr) {
@@ -137,7 +137,7 @@ void Variable::add_history() {
     history.push_back({current});
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> Variable::estimate_grads() {
+MatrixX4dRB Variable::estimate_grads() {
     if (estimate_grid_cache_valid) {
         return estimate_grid_cache;
     }
@@ -181,7 +181,7 @@ _GradEstimated Variable::dy() {
     return _GradEstimated{this,  false, true};
 }
 
-std::tuple<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> Variable::get_interface_vars_first_order() {
+std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_first_order() {
     if (is_subvariable) {
         auto [left_eval1, left_eval2, left_eval3] = left_operand->get_interface_vars_first_order();
         auto [right_eval1, right_eval2, right_eval3] = right_operand->get_interface_vars_first_order();
@@ -244,7 +244,7 @@ Eigen::VectorXd Variable::extract(Eigen::VectorXd &left_part, double dt) {
     return left_part;
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> Variable::evaluate() {
+MatrixX4dRB Variable::evaluate() {
     if (!is_subvariable) {
         return current;
     }
@@ -287,31 +287,31 @@ std::tuple<std::shared_ptr<Variable>, std::shared_ptr<Variable>> get_that_vars(c
 Variable Variable::operator+(const Variable &obj_r) const {
     std::string name_ = "(" + this->name + "+" + obj_r.name + ")";
     auto [l_p, r_p] = get_that_vars(this, obj_r);
-    return {l_p, r_p, [](Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& lft, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& rht){return lft + rht;}, name_};
+    return {l_p, r_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return lft + rht;}, name_};
 }
 
 Variable Variable::operator-(const Variable &obj_r) const {
     std::string name_ = "(" + this->name + "-" + obj_r.name + ")";
     auto [l_p, r_p] = get_that_vars(this, obj_r);
-    return {l_p, r_p, [](Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& lft, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& rht){return lft - rht;}, name_};
+    return {l_p, r_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return lft - rht;}, name_};
 }
 
 Variable Variable::operator*(const Variable &obj_r) const {
     std::string name_ = "(" + this->name + "*" + obj_r.name + ")";
     auto [l_p, r_p] = get_that_vars(this, obj_r);
-    return {l_p, r_p, [](Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& lft, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& rht){return lft.cwiseProduct(rht);}, name_};
+    return {l_p, r_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return lft.cwiseProduct(rht);}, name_};
 }
 
 Variable Variable::operator/(const Variable &obj_r) const {
     std::string name_ = "(" + this->name + "/" + obj_r.name + ")";
     auto [l_p, r_p] = get_that_vars(this, obj_r);
-    return {l_p, r_p, [](Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& lft, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& rht){return lft.cwiseQuotient(rht);}, name_};
+    return {l_p, r_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return lft.cwiseQuotient(rht);}, name_};
 }
 
 Variable Variable::operator-() const {
     std::string name_ = "-(" + this->name + ")";
     auto [l_p, r_p] = get_that_vars(this, *this);
-    return {l_p, l_p, [](Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& lft, Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& rht){return -lft;}, name_};
+    return {l_p, l_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return -lft;}, name_};
 }
 
 Variable operator+(const double obj_l, const Variable & obj_r) {
@@ -360,7 +360,7 @@ _GradEstimated::_GradEstimated(Variable *var_, bool clc_x_, bool clc_y_) : var{v
     is_constvar = true;
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> _GradEstimated::evaluate() {
+MatrixX4dRB _GradEstimated::evaluate() {
     auto grads = var->estimate_grads();
     if (clc_x && clc_y) {
         return grads.col(0) + grads.col(1);
@@ -371,7 +371,7 @@ Eigen::Matrix<double, -1, -1, Eigen::RowMajor> _GradEstimated::evaluate() {
     if (clc_y) {
         return grads.col(1);
     }
-    return Eigen::Matrix<double, -1, -1, Eigen::RowMajor>{};
+    return MatrixX4dRB{};
 }
 
 // TODO: think about general interface
@@ -399,7 +399,7 @@ void DT::update() {
     _dt = update_fn(CFL, space_vars, mesh);
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> DT::evaluate() {
+MatrixX4dRB DT::evaluate() {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     ret.setConstant(_dt);
     return ret;
@@ -421,7 +421,7 @@ _Grad::_Grad(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{cl
     var = std::shared_ptr<Variable>{var_->clone()};
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> _Grad::evaluate() {
+MatrixX4dRB _Grad::evaluate() {
     auto current_interface_gradients = var->get_interface_vars_first_order();
     auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
 
@@ -437,14 +437,14 @@ Eigen::Matrix<double, -1, -1, Eigen::RowMajor> _Grad::evaluate() {
     if (clc_y) {
         return res_y;
     }
-    return Eigen::Matrix<double, -1, -1, Eigen::RowMajor>{};
+    return MatrixX4dRB{};
 }
 
 _Stab::_Stab(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
     var = std::shared_ptr<Variable>{var_->clone()};
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> _Stab::evaluate() {
+MatrixX4dRB _Stab::evaluate() {
     auto current_interface_gradients = var->get_interface_vars_first_order();
     auto current_interface_gradients_star = (std::get<2>(current_interface_gradients) - std::get<1>(current_interface_gradients)) / 2;
 
@@ -460,7 +460,7 @@ Eigen::Matrix<double, -1, -1, Eigen::RowMajor> _Stab::evaluate() {
     if (clc_y) {
         return res_y;
     }
-    return Eigen::Matrix<double, -1, -1, Eigen::RowMajor>{};
+    return MatrixX4dRB{};
 }
 
 void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_var, DT *dt) {
@@ -518,9 +518,9 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
     }
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> to_grid(Mesh2D* mesh, Eigen::VectorXd& values_half) {
+MatrixX4dRB to_grid(Mesh2D* mesh, Eigen::VectorXd& values_half) {
     auto values = CFDArcoGlobalInit::recombine(values_half, "to_grid");
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> result = {mesh->_x, mesh->_y};
+    MatrixX4dRB result = {mesh->_x, mesh->_y};
     for (auto& node : mesh->_nodes_tot) {
         double value = values(node->_id);
         size_t x_coord = node->_id / mesh->_x;

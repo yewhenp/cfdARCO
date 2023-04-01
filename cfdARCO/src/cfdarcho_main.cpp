@@ -59,11 +59,12 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
     mesh->_vec_in_edge_direction_y = mesh->_vec_in_edge_direction_y_tot(current_proc_node_distribution, Eigen::all);
     mesh->_vec_in_edge_neigh_direction_x = mesh->_vec_in_edge_neigh_direction_x_tot(current_proc_node_distribution, Eigen::all);
     mesh->_vec_in_edge_neigh_direction_y = mesh->_vec_in_edge_neigh_direction_y_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_n2_ids = {};
+    mesh->_n2_ids = Eigen::MatrixX4d {current_proc_node_distribution.size(), 4};
     for (int i = 0; i < 4; ++i) {
-        mesh->_n2_ids.emplace_back();
+        int qq = 0;
         for (auto current_proc_node : current_proc_node_distribution) {
-            mesh->_n2_ids[i].push_back(mesh->_n2_ids_tot[i][current_proc_node]);
+            mesh->_n2_ids(qq, i) = mesh->_n2_ids_tot(current_proc_node, i);
+            qq++;
         }
     }
     mesh->_num_nodes = current_proc_node_distribution.size();
@@ -74,8 +75,8 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
     }
 }
 
-std::vector<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> CFDArcoGlobalInit::get_redistributed(const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& inst, const std::string& name) {
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> buff {mesh->_num_nodes_tot, inst.cols()};
+std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB& inst, const std::string& name) {
+    MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
     buff.setConstant(0);
     std::vector<int> send_sizes;
     std::vector<int> send_displ;
@@ -86,16 +87,17 @@ std::vector<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> CFDArcoGlobalInit::g
         curr_displ += num_nodes * inst.cols();
     }
     MPI_Allgatherv(inst.data(), inst.rows() * inst.cols(), MPI_DOUBLE, buff.data(), send_sizes.data(), send_displ.data(), MPI_DOUBLE, MPI_COMM_WORLD);
-    std::vector<Eigen::Matrix<double, -1, -1, Eigen::RowMajor>> ret = {};
-    for (const auto & idx : mesh->_n2_ids) {
-        ret.emplace_back(buff(idx, Eigen::all));
+    std::vector<MatrixX4dRB> ret = {};
+//    ret.reserve(4);
+    for (int idx = 0; idx < mesh->_n2_ids.cols(); ++idx) {
+        ret.emplace_back(buff(mesh->_n2_ids.col(idx), Eigen::all));
     }
 
     return ret;
 }
 
-Eigen::Matrix<double, -1, -1, Eigen::RowMajor> CFDArcoGlobalInit::recombine(const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>& inst, const std::string& name) {
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> buff {mesh->_num_nodes_tot, inst.cols()};
+MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::string& name) {
+    MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
     buff.setConstant(0);
     std::vector<int> send_sizes;
     std::vector<int> send_displ;
