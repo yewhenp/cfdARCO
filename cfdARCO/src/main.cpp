@@ -8,28 +8,33 @@
 
 #include "mesh2d.hpp"
 #include "fvm.hpp"
+#include "cfdarcho_main.hpp"
 
 
 Eigen::VectorXd initial_val(Mesh2D* mesh, double val_out, double val_in) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    int i = 0;
     for (auto& node : mesh->_nodes) {
         if (.3 < node->y() && node->y() < .7) {
-            ret(node->_id) = val_in;
+            ret(i) = val_in;
         } else {
-            ret(node->_id) = val_out;
+            ret(i) = val_out;
         }
+        ++i;
     }
     return ret;
 }
 
 Eigen::VectorXd initial_pertrubations(Mesh2D* mesh, double val_out, double val_in) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    int i = 0;
     for (auto& node : mesh->_nodes) {
         if (.3 < node->x() && node->x() < .7) {
-            ret(node->_id) = val_in;
+            ret(i) = val_in;
         } else {
-            ret(node->_id) = val_out;
+            ret(i) = val_out;
         }
+        ++i;
     }
     return ret;
 }
@@ -39,15 +44,17 @@ Eigen::VectorXd boundary_none(Mesh2D* mesh, Eigen::VectorXd& arr) {
 }
 
 Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
-    for (auto& node : mesh->_nodes) {
-        if (node->is_boundary()) {
-            arr(node->_id) = copy_var(node->_id);
+    for (int i = 0; i < mesh->_num_nodes; ++i) {
+        if (mesh->_nodes[i]->is_boundary()) {
+            arr(i) = copy_var(i);
         }
     }
     return arr;
 }
 
-int main() {
+int main(int argc, char **argv) {
+    CFDArcoGlobalInit::initialize(argc, argv);
+
     bool visualize = 1;
 
     size_t L = 100;
@@ -58,6 +65,8 @@ int main() {
     auto mesh = Mesh2D{L, L, 1, 1};
     mesh.init_basic_internals();
     mesh.compute();
+
+    CFDArcoGlobalInit::make_node_distribution(&mesh);
 
     auto rho_initial = initial_val(&mesh, 1, 2);
     auto rho = Variable(&mesh,
@@ -153,23 +162,21 @@ int main() {
     auto begin = std::chrono::steady_clock::now();
     equation.evaluate(all_vars, equation_system, &dt, visualize);
     auto end = std::chrono::steady_clock::now();
-    std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
+    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
     if (visualize) {
         auto fig = matplot::figure(true);
-        size_t ii = 0;
         for (auto& hist : rho.history) {
-            ii += 1;
-            if (ii % 10 != 0) {
-                continue;
-            }
             auto grid_hist = to_grid(&mesh, hist);
-            auto vect = from_eigen_matrix<double>(grid_hist);
-            fig->current_axes()->image(vect);
-            fig->draw();
-            std::this_thread::sleep_for(std::chrono::milliseconds {100});
+            if (CFDArcoGlobalInit::get_rank() == 0) {
+                auto vect = from_eigen_matrix<double>(grid_hist);
+                fig->current_axes()->image(vect);
+                fig->draw();
+                std::this_thread::sleep_for(std::chrono::milliseconds {100});
+            }
         }
     }
 
+    CFDArcoGlobalInit::finalize();
     return 0;
 }

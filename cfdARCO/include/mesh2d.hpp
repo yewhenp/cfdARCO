@@ -67,12 +67,13 @@ public:
 
 class Mesh2D : AbstractMesh {
 public:
-    Mesh2D(size_t x, size_t y, double lx, double ly) : _num_nodes{x*y}, _x{x}, _y{y},
+    Mesh2D(size_t x, size_t y, double lx, double ly) : _num_nodes{x*y}, _num_nodes_tot{x*y}, _x{x}, _y{y},
             _lx{lx}, _ly{ly}, _dx{lx / static_cast<double>(x)}, _dy{ly / static_cast<double>(y)} {};
     void compute() override;
     void init_basic_internals();
     [[nodiscard]] size_t coord_fo_idx(size_t x, size_t y) const;
 
+    size_t _num_nodes_tot;
     size_t _num_nodes;
     size_t _x;
     size_t _y;
@@ -82,7 +83,17 @@ public:
     double _dy;
     std::vector<std::shared_ptr<Vertex2D>> _vertexes{};
     std::vector<std::shared_ptr<Edge2D>> _edges{};
+    std::vector<std::shared_ptr<Quadrangle2D>> _nodes_tot{};
     std::vector<std::shared_ptr<Quadrangle2D>> _nodes{};
+    Eigen::VectorXd _volumes_tot{};
+    Eigen::MatrixX4d _normal_x_tot{};
+    Eigen::MatrixX4d _normal_y_tot{};
+    Eigen::MatrixX4d _vec_in_edge_direction_x_tot{};
+    Eigen::MatrixX4d _vec_in_edge_direction_y_tot{};
+    Eigen::MatrixX4d _vec_in_edge_neigh_direction_x_tot{};
+    Eigen::MatrixX4d _vec_in_edge_neigh_direction_y_tot{};
+    std::vector<std::vector<int>> _n2_ids_tot{};
+
     Eigen::VectorXd _volumes{};
     Eigen::MatrixX4d _normal_x{};
     Eigen::MatrixX4d _normal_y{};

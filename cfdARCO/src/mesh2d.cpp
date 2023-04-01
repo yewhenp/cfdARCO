@@ -106,27 +106,27 @@ void Mesh2D::compute() {
         entry->compute();
     }
 
-    _volumes = Eigen::VectorXd {_num_nodes};
+    _volumes_tot = Eigen::VectorXd {_num_nodes_tot};
     for (const auto& node : _nodes) {
-        _volumes(node->_id) = node->_volume;
+        _volumes_tot(node->_id) = node->_volume;
     }
 
     for (int i = 0; i < 4; ++i) {
-        _n2_ids.emplace_back();
+        _n2_ids_tot.emplace_back();
     }
 
-    _normal_x = Eigen::MatrixX4d {_num_nodes, 4};
-    _normal_y = Eigen::MatrixX4d {_num_nodes, 4};
-    _vec_in_edge_direction_x = Eigen::MatrixX4d {_num_nodes, 4};
-    _vec_in_edge_direction_y = Eigen::MatrixX4d {_num_nodes, 4};
-    _vec_in_edge_neigh_direction_x = Eigen::MatrixX4d {_num_nodes, 4};
-    _vec_in_edge_neigh_direction_y = Eigen::MatrixX4d {_num_nodes, 4};
-    for (size_t i = 0; i < _num_nodes; ++i) {
+    _normal_x_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    _normal_y_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    _vec_in_edge_direction_x_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    _vec_in_edge_direction_y_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    _vec_in_edge_neigh_direction_x_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    _vec_in_edge_neigh_direction_y_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    for (size_t i = 0; i < _num_nodes_tot; ++i) {
         auto& node = _nodes.at(i);
         Eigen::Vector4d norm_v_x {node->_normals.block<4, 1>(0, 0)};
         Eigen::Vector4d norm_v_y {node->_normals.block<4, 1>(0, 1)};
-        _normal_x.block<1, 4>(node->_id, 0) = norm_v_x;
-        _normal_y.block<1, 4>(node->_id, 0) = norm_v_y;
+        _normal_x_tot.block<1, 4>(node->_id, 0) = norm_v_x;
+        _normal_y_tot.block<1, 4>(node->_id, 0) = norm_v_y;
 
         for (int j = 0; j < node->_edges_id.size(); ++j) {
             auto edge_id = node->_edges_id.at(j);
@@ -143,14 +143,23 @@ void Mesh2D::compute() {
                 }
             }
 
-            _vec_in_edge_direction_x(node->_id, j) = n1->_vectors_in_edges_directions(j, 0);
-            _vec_in_edge_direction_y(node->_id, j) = n1->_vectors_in_edges_directions(j, 1);
-            _vec_in_edge_neigh_direction_x(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 0);
-            _vec_in_edge_neigh_direction_y(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 1);
+            _vec_in_edge_direction_x_tot(node->_id, j) = n1->_vectors_in_edges_directions(j, 0);
+            _vec_in_edge_direction_y_tot(node->_id, j) = n1->_vectors_in_edges_directions(j, 1);
+            _vec_in_edge_neigh_direction_x_tot(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 0);
+            _vec_in_edge_neigh_direction_y_tot(node->_id, j) = n2->_vectors_in_edges_directions_by_id.at(edge_id)(0, 1);
 
-            _n2_ids[j].push_back(n2->_id);
+            _n2_ids_tot[j].push_back(n2->_id);
         }
     }
+
+    _volumes = _volumes_tot;
+    _normal_x = _normal_x_tot;
+    _normal_y = _normal_y_tot;
+    _vec_in_edge_direction_x = _vec_in_edge_direction_x_tot;
+    _vec_in_edge_direction_y = _vec_in_edge_direction_y_tot;
+    _vec_in_edge_neigh_direction_x = _vec_in_edge_neigh_direction_x_tot;
+    _vec_in_edge_neigh_direction_y = _vec_in_edge_neigh_direction_y_tot;
+    _n2_ids = _n2_ids_tot;
 }
 
 void Mesh2D::init_basic_internals() {
