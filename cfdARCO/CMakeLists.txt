@@ -18,3 +18,5 @@ target_link_libraries (cfdARCO OpenMP::OpenMP_CXX)
 target_link_libraries (cfdARCO indicators::indicators)
 target_link_libraries (cfdARCO Matplot++::matplot)
 target_link_libraries(cfdARCO MPI::MPI_CXX)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")

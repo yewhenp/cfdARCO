@@ -55,7 +55,7 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 int main(int argc, char **argv) {
     CFDArcoGlobalInit::initialize(argc, argv);
 
-    bool visualize = 0;
+    bool visualize = 1;
 
     size_t L = 100;
     size_t timesteps = 1000;
@@ -144,10 +144,10 @@ int main(int argc, char **argv) {
             {&v,          '=', v_t_h * 1},
             {&p,          '=', p_t_h * 1},
 
-            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - (stab_x(rho) + stab_y(rho)))},
-            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - (stab_x(rho * u) + stab_y(rho * u)))},
-            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - (stab_x(rho * v) + stab_y(rho * v)))},
-            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - (stab_x(E) + stab_y(E)))},
+            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - (stab_x(rho) + stab_y(rho)) * 2)},
+            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - (stab_x(rho * u) + stab_y(rho * u)) * 2)},
+            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - (stab_x(rho * v) + stab_y(rho * v)) * 2)},
+            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - (stab_x(E) + stab_y(E)) * 2)},
 
             {&rho,        '=', mass / mesh._volumes},
             {&u,          '=', rho_u / rho / mesh._volumes},
@@ -165,8 +165,11 @@ int main(int argc, char **argv) {
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
     if (visualize) {
+        int i = 0;
         auto fig = matplot::figure(true);
         for (auto& hist : rho.history) {
+            i++;
+            if (i % 10 != 0) continue;
             auto grid_hist = to_grid(&mesh, hist);
             if (CFDArcoGlobalInit::get_rank() == 0) {
                 auto vect = from_eigen_matrix<double>(grid_hist);

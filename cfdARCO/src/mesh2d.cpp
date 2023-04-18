@@ -305,3 +305,27 @@ void Mesh2D::init_basic_internals() {
 size_t Mesh2D::coord_fo_idx(size_t x, size_t y) const {
     return x * _x + y;
 }
+
+std::vector<size_t> Mesh2D::get_ids_of_neightbours(size_t node_id) {
+    std::vector<size_t> ret {};
+
+    auto& node = _nodes.at(node_id);
+
+    for (int j = 0; j < node->_edges_id.size(); ++j) {
+        auto edge_id = node->_edges_id.at(j);
+        auto &edge = _edges.at(edge_id);
+
+        if (edge->_nodes_id.size() > 1) {
+            auto &n1_ = _nodes.at(edge->_nodes_id.at(0));
+            auto &n2_ = _nodes.at(edge->_nodes_id.at(1));
+            if (n1_->_id != node_id) {
+                ret.push_back(n1_->_id);
+            }
+            if (n2_->_id != node_id) {
+                ret.push_back(n2_->_id);
+            }
+        }
+    }
+
+    return ret;
+}

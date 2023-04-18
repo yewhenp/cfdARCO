@@ -123,6 +123,11 @@ std::shared_ptr<Variable> _Grad::clone() const {
     return std::shared_ptr<Variable>{new_obj};
 }
 
+std::shared_ptr<Variable> _Grad2::clone() const {
+    auto* new_obj = new _Grad2(*this);
+    return std::shared_ptr<Variable>{new_obj};
+}
+
 std::shared_ptr<Variable> _Stab::clone() const  {
     auto* new_obj = new _Stab(*this);
     return std::shared_ptr<Variable>{new_obj};
@@ -179,6 +184,57 @@ _GradEstimated Variable::dx() {
 
 _GradEstimated Variable::dy() {
     return _GradEstimated{this,  false, true};
+}
+
+std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_second_order() {
+    if (is_subvariable) {
+        auto [left_eval1, left_eval2, left_eval3] = left_operand->get_interface_vars_second_order();
+        auto [right_eval1, right_eval2, right_eval3] = right_operand->get_interface_vars_second_order();
+
+        return {op(left_eval1, right_eval1), op(left_eval2, right_eval2), op(left_eval3, right_eval3)};
+    }
+
+    auto grads = estimate_grads();
+    auto grads_self_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto grads_self_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto grads_neigh_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto grads_neigh_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto cur_self = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto cur_neigh = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+
+    auto ret_r = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto ret_l = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+
+    for (int j = 0; j < 4; ++j) {
+        grads_self_x.col(j) = grads.col(0);
+        grads_self_y.col(j) = grads.col(1);
+        grads_neigh_x.col(j) = grad_redist[j].col(0);
+        grads_neigh_y.col(j) = grad_redist[j].col(1);
+        cur_self.col(j) = current;
+        cur_neigh.col(j) = current_redist[j];
+    }
+
+    auto grads_self_xd = grads_self_x.cwiseProduct(mesh->_vec_in_edge_direction_x);
+    auto grads_self_yd = grads_self_y.cwiseProduct(mesh->_vec_in_edge_direction_y);
+    auto grads_neigh_xd = grads_neigh_x.cwiseProduct(mesh->_vec_in_edge_neigh_direction_x);
+    auto grads_neigh_yd = grads_neigh_y.cwiseProduct(mesh->_vec_in_edge_neigh_direction_y);
+
+    auto val_self = (grads_self_xd + grads_self_yd + cur_self).eval();
+    auto val_neigh = (grads_neigh_xd + grads_neigh_yd + cur_neigh).eval();
+
+    auto ret_sum = (val_self + val_neigh) / 2;
+
+    ret_r.col(0) = val_neigh.col(0);
+    ret_r.col(1) = val_self.col(1);
+    ret_r.col(2) = val_self.col(2);
+    ret_r.col(3) = val_neigh.col(3);
+
+    ret_l.col(0) = val_self.col(0);
+    ret_l.col(1) = val_neigh.col(1);
+    ret_l.col(2) = val_neigh.col(2);
+    ret_l.col(3) = val_self.col(3);
+
+    return {ret_sum, ret_r, ret_l};
 }
 
 std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_first_order() {
@@ -239,6 +295,7 @@ std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_f
 
     return {ret_sum, ret_r, ret_l};
 }
+
 
 Eigen::VectorXd Variable::extract(Eigen::VectorXd &left_part, double dt) {
     return left_part;
@@ -419,6 +476,7 @@ void _DT::solve(Variable* equation, DT* dt) {
 
 _Grad::_Grad(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
     var = std::shared_ptr<Variable>{var_->clone()};
+    mesh = var_->mesh;
 }
 
 MatrixX4dRB _Grad::evaluate() {
@@ -440,8 +498,70 @@ MatrixX4dRB _Grad::evaluate() {
     return MatrixX4dRB{};
 }
 
+_Grad2::_Grad2(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
+    var = std::shared_ptr<Variable>{var_->clone()};
+    mesh = var_->mesh;
+}
+
+MatrixX4dRB _Grad2::evaluate() {
+    auto current_interface_gradients = var->get_interface_vars_first_order();
+    auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
+
+    Eigen::VectorXd res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
+    Eigen::VectorXd res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
+
+    if (clc_x) {
+        return res_x;
+    }
+    if (clc_y) {
+        return res_y;
+    }
+    return MatrixX4dRB{};
+
+//    auto current_interface_gradients = var->get_interface_vars_first_order();
+//    auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
+//
+//    Eigen::VectorXd res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
+//    Eigen::VectorXd res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
+//
+//    if (clc_x) {
+//        auto varr = Variable(mesh, res_x, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
+//        return d1dx(varr).evaluate();
+//    }
+//    if (clc_y) {
+//        auto varr = Variable(mesh, res_y, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
+//        return d1dy(varr).evaluate();
+//    }
+//    return MatrixX4dRB{};
+
+//    auto current_interface_gradients = var->get_interface_vars_first_order();
+//    auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
+//
+//    Eigen::VectorXd res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
+//    Eigen::VectorXd res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
+//
+//    if (clc_x) {
+//        auto varr = Variable(mesh, res_x, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
+//        return varr.dx().evaluate();
+//    }
+//    if (clc_y) {
+//        auto varr = Variable(mesh, res_y, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
+//        return varr.dy().evaluate();
+//    }
+//    return MatrixX4dRB{};
+
+//if (clc_x) {
+//        return var->dx().evaluate();
+//    }
+//    if (clc_y) {
+//        return var->dy().evaluate();
+//    }
+//    return MatrixX4dRB{};
+}
+
 _Stab::_Stab(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
     var = std::shared_ptr<Variable>{var_->clone()};
+    mesh = var_->mesh;
 }
 
 MatrixX4dRB _Stab::evaluate() {

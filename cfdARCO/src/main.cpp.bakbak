@@ -1,0 +1,96 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
+#include <iostream>
+#include <matplot/matplot.h>
+#include <chrono>
+#include <thread>
+
+#include "mesh2d.hpp"
+#include "fvm.hpp"
+#include "cfdarcho_main.hpp"
+
+
+Eigen::VectorXd initial_val(Mesh2D* mesh) {
+    Eigen::VectorXd ret = Eigen::VectorXd::Random(mesh->_num_nodes).cwiseAbs();
+    return ret;
+}
+
+
+Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
+    for (int i = 0; i < mesh->_num_nodes; ++i) {
+        if (mesh->_nodes[i]->is_boundary()) {
+            arr(i) = copy_var(i);
+        }
+    }
+    return arr;
+}
+
+int main(int argc, char **argv) {
+    CFDArcoGlobalInit::initialize(argc, argv);
+
+    bool visualize = 1;
+
+    size_t L = 40;
+    size_t timesteps = 9000;
+    double CFL = 0.5;
+
+    auto mesh = Mesh2D{L, L, 2, 2};
+    mesh.init_basic_internals();
+    mesh.compute();
+
+    CFDArcoGlobalInit::make_node_distribution(&mesh);
+
+    auto u_initial = initial_val(&mesh);
+    auto u = Variable(&mesh,
+                          u_initial,
+                          [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, u_initial); },
+                          "u");
+
+    auto v_initial = initial_val(&mesh);
+    auto v = Variable(&mesh,
+                      v_initial,
+                      [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, v_initial); },
+                      "v");
+
+    std::vector<Variable*> space_vars {};
+    auto dt = DT(&mesh, [](double CFL, std::vector<Variable *> &space_vars, Mesh2D* mesh) { return .001; }, CFL, space_vars);
+
+    double a = 2.8e-4;
+    double b = 5e-3;
+    double tau = .1;
+    double k = -.005;
+
+    std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
+            {d1t(u), '=', a * (d2dy(u) + d2dx(u)) + u - (u*u*u) - v + k},
+            {d1t(v), '=', (b * (d2dy(v) + d2dx(v)) + u - v) / tau}
+    };
+
+    auto equation = Equation(timesteps);
+
+    std::vector<Variable*> all_vars {&u, &v};
+
+    auto begin = std::chrono::steady_clock::now();
+    equation.evaluate(all_vars, equation_system, &dt, visualize);
+    auto end = std::chrono::steady_clock::now();
+    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
+
+    if (visualize) {
+        int i = 0;
+        auto fig = matplot::figure(true);
+        for (auto& hist : u.history) {
+            i++;
+            if (i % 100 != 0) continue;
+            auto grid_hist = to_grid(&mesh, hist);
+            if (CFDArcoGlobalInit::get_rank() == 0) {
+                auto vect = from_eigen_matrix<double>(grid_hist);
+                fig->current_axes()->image(vect);
+                fig->draw();
+                std::this_thread::sleep_for(std::chrono::milliseconds {100});
+            }
+        }
+    }
+
+    CFDArcoGlobalInit::finalize();
+    return 0;
+}

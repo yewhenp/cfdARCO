@@ -20,9 +20,14 @@ public:
 
 private:
     ~CFDArcoGlobalInit();
+    static std::vector<std::vector<size_t>> get_send_perspective(std::vector<size_t>& proc_node_distribution,
+                                                                 Mesh2D* mesh, size_t proc_rank);
 
     static std::vector<std::vector<size_t>> node_distribution;
     static std::vector<size_t> current_proc_node_distribution;
+    static std::vector<size_t> node_id_to_proc;
+    static std::vector<std::vector<size_t>> current_proc_node_receive_distribution;
+    static std::vector<std::vector<size_t>> current_proc_node_send_distribution;
     static std::vector<size_t> nums_nodes_per_proc;
     static Mesh2D* mesh;
     static int world_size;

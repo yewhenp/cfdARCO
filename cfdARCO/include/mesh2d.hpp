@@ -73,6 +73,7 @@ public:
     void compute() override;
     void init_basic_internals();
     [[nodiscard]] size_t coord_fo_idx(size_t x, size_t y) const;
+    std::vector<size_t> get_ids_of_neightbours(size_t node_id);
 
     size_t _num_nodes_tot;
     size_t _num_nodes;

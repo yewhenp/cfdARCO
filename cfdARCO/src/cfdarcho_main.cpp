@@ -3,11 +3,17 @@
 
 #include <Eigen/Core>
 #include <mpi.h>
+#include <numeric>
+#include <algorithm>
+#include <random>
 #include "cfdarcho_main.hpp"
 
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::node_distribution = {};
 std::vector<size_t> CFDArcoGlobalInit::current_proc_node_distribution = {};
 std::vector<size_t> CFDArcoGlobalInit::nums_nodes_per_proc = {};
+std::vector<size_t> CFDArcoGlobalInit::node_id_to_proc = {};
+std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_send_distribution = {};
+std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_receive_distribution = {};
 Mesh2D* CFDArcoGlobalInit::mesh = nullptr;
 int CFDArcoGlobalInit::world_size = 0;
 int CFDArcoGlobalInit::world_rank = 0;
@@ -17,13 +23,36 @@ void CFDArcoGlobalInit::finalize() {
     MPI_Finalize();
 }
 
+
+std::vector<std::vector<size_t>> CFDArcoGlobalInit::get_send_perspective(std::vector<size_t>& proc_node_distribution,
+                                                      Mesh2D* mesh, size_t proc_rank){
+    std::vector<std::vector<size_t>> ret{};
+    for (int i = 0; i < CFDArcoGlobalInit::world_size; ++i) {
+        ret.emplace_back();
+    }
+    for (auto node_id : proc_node_distribution) {
+        for (auto neigh_id : mesh->get_ids_of_neightbours(node_id)) {
+            if (node_id_to_proc[neigh_id] != proc_rank) {
+                auto proc_id = node_id_to_proc[neigh_id];
+                if (!std::count(ret[proc_id].begin(),
+                                ret[proc_id].end(), node_id)) {
+                    ret[proc_id].push_back(node_id);
+                }
+            }
+        }
+    }
+    return ret;
+}
+
 void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
     mesh = _mesh;
-    num_modes_per_proc = (mesh->_num_nodes / world_size) + 1;
+    num_modes_per_proc = mesh->_num_nodes / world_size;
+    node_id_to_proc.resize(mesh->_num_nodes);
 
-    size_t current_proc = -1;
+    int current_proc = -1;
     size_t current_proc_num = 0;
     bool flag = false;
+
     for (size_t i = 0; i < mesh->_num_nodes; ++i) {
         if (i % num_modes_per_proc == 0) {
             current_proc += 1;
@@ -34,23 +63,25 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
             flag = true;
         }
         node_distribution[current_proc].push_back(mesh->_nodes[i]->_id);
+        node_id_to_proc[mesh->_nodes[i]->_id] = current_proc;
         current_proc_num += 1;
     }
     if (current_proc_num > 0)
         nums_nodes_per_proc.push_back(current_proc_num);
 
-    for (auto& node_list : node_distribution) {
-        size_t lastt = node_list[0];
-        for (int i = 1; i < node_list.size(); ++i) {
-            if(lastt != node_list[i] - 1) {
-                std::cerr << "NOT contin" << std::endl;
-                exit(-4);
-            }
-            lastt = node_list[i];
-        }
+    current_proc_node_distribution = node_distribution[world_rank];
+
+    std::vector<std::vector<std::vector<size_t>>> sending_nodes_from_proc_perspectiv = {};
+    for (int i = 0; i < world_size; ++i) {
+        sending_nodes_from_proc_perspectiv.push_back(get_send_perspective(node_distribution[i], mesh, i));
     }
 
-    current_proc_node_distribution = node_distribution[world_rank];
+    current_proc_node_send_distribution = sending_nodes_from_proc_perspectiv[world_rank];
+    current_proc_node_receive_distribution = {};
+    for (int i = 0; i < world_size; ++i) {
+        current_proc_node_receive_distribution.push_back(sending_nodes_from_proc_perspectiv[i][world_rank]);
+    }
+
 
     mesh->_volumes = mesh->_volumes_tot(current_proc_node_distribution, Eigen::all);
     mesh->_normal_x = mesh->_normal_x_tot(current_proc_node_distribution, Eigen::all);
@@ -78,17 +109,42 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
 std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB& inst, const std::string& name) {
     MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
     buff.setConstant(0);
-    std::vector<int> send_sizes;
-    std::vector<int> send_displ;
-    int curr_displ = 0;
-    for (auto num_nodes : nums_nodes_per_proc) {
-        send_sizes.push_back(num_nodes * inst.cols());
-        send_displ.push_back(curr_displ);
-        curr_displ += num_nodes * inst.cols();
+    buff(current_proc_node_distribution, Eigen::all) = inst;
+
+    std::vector<MatrixX4dRB> input_buffers;
+    std::vector<MatrixX4dRB> output_buffers;
+    std::vector<MPI_Request> mpi_requests;
+    std::vector<MPI_Status> mpi_statuses;
+    for (int i = 0; i < world_size; ++i) {
+        input_buffers.emplace_back(current_proc_node_receive_distribution[i].size(), inst.cols());
+        output_buffers.emplace_back(buff(current_proc_node_send_distribution[i], Eigen::all));
     }
-    MPI_Allgatherv(inst.data(), inst.rows() * inst.cols(), MPI_DOUBLE, buff.data(), send_sizes.data(), send_displ.data(), MPI_DOUBLE, MPI_COMM_WORLD);
+    for (int i = 0; i < world_size; ++i) {
+        if (i == world_rank)
+            continue;
+        if (!current_proc_node_receive_distribution[i].empty()) {
+            MPI_Request req;
+            mpi_requests.push_back(req);
+            MPI_Irecv(input_buffers[i].data(), input_buffers[i].rows() * input_buffers[i].cols(), MPI_DOUBLE, i, i * 100 + world_rank * 1000, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
+        }
+        if (!current_proc_node_send_distribution[i].empty()) {
+            MPI_Request req;
+            mpi_requests.push_back(req);
+            MPI_Isend(output_buffers[i].data(), output_buffers[i].rows() * output_buffers[i].cols(), MPI_DOUBLE, i, i * 1000 + world_rank * 100, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
+        }
+    }
+
+    MPI_Waitall(mpi_requests.size(), mpi_requests.data(), mpi_statuses.data());
+
+    for (int i = 0; i < world_size; ++i) {
+        if (i == world_rank)
+            continue;
+        if (!current_proc_node_receive_distribution[i].empty()) {
+            buff(current_proc_node_receive_distribution[i], Eigen::all) = input_buffers[i];
+        }
+    }
+
     std::vector<MatrixX4dRB> ret = {};
-//    ret.reserve(4);
     for (int idx = 0; idx < mesh->_n2_ids.cols(); ++idx) {
         ret.emplace_back(buff(mesh->_n2_ids.col(idx), Eigen::all));
     }
@@ -96,18 +152,37 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
     return ret;
 }
 
+
 MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::string& name) {
     MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
     buff.setConstant(0);
-    std::vector<int> send_sizes;
-    std::vector<int> send_displ;
-    int curr_displ = 0;
-    for (auto num_nodes : nums_nodes_per_proc) {
-        send_sizes.push_back(num_nodes * inst.cols());
-        send_displ.push_back(curr_displ);
-        curr_displ += num_nodes * inst.cols();
+    buff(current_proc_node_distribution, Eigen::all) = inst;
+
+    std::vector<MatrixX4dRB> input_buffers;
+    std::vector<MPI_Request> mpi_requests;
+    std::vector<MPI_Status> mpi_statuses;
+
+    for (int i = 0; i < world_size; ++i) {
+        input_buffers.emplace_back(node_distribution[i].size(), inst.cols());
+        if (i == world_rank)
+            continue;
+        MPI_Request req;
+        mpi_requests.push_back(req);
+        MPI_Isend(inst.data(), inst.rows() * inst.cols(), MPI_DOUBLE, i, i * 1000 + world_rank * 100, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
+
+        MPI_Request req1;
+        mpi_requests.push_back(req1);
+        MPI_Irecv(input_buffers[i].data(), input_buffers[i].rows() * input_buffers[i].cols(), MPI_DOUBLE, i, i * 100 + world_rank * 1000, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
     }
-    MPI_Allgatherv(inst.data(), inst.rows() * inst.cols(), MPI_DOUBLE, buff.data(), send_sizes.data(), send_displ.data(), MPI_DOUBLE, MPI_COMM_WORLD);
+
+    MPI_Waitall(mpi_requests.size(), mpi_requests.data(), mpi_statuses.data());
+
+    for (int i = 0; i < world_size; ++i) {
+        if (i == world_rank)
+            continue;
+        buff(node_distribution[i], Eigen::all) = input_buffers[i];
+    }
+
     return buff;
 }
 

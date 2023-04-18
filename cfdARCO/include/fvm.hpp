@@ -34,6 +34,7 @@ public:
     _GradEstimated dx();
     _GradEstimated dy();
     std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_first_order();
+    std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_second_order();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
     virtual MatrixX4dRB evaluate();
     void set_current(Eigen::VectorXd& current_);
@@ -145,6 +146,18 @@ public:
     bool clc_y;
 };
 
+class _Grad2 : public Variable {
+public:
+    _Grad2(Variable* var_, bool clc_x_=1, bool clc_y_=1);
+
+    MatrixX4dRB evaluate() override;
+    std::shared_ptr<Variable> clone() const override;
+
+    std::shared_ptr<Variable> var;
+    bool clc_x;
+    bool clc_y;
+};
+
 
 class _Stab : public Variable {
 public:
@@ -185,6 +198,22 @@ inline auto d1dy(Variable& var) {
 
 inline auto d1dy(Variable&& var) {
     return _Grad(&var,  false, true);
+}
+
+inline auto d2dx(Variable& var) {
+    return _Grad2(&var, true, false);
+}
+
+inline auto d2dx(Variable&& var) {
+    return _Grad2(&var, true, false);
+}
+
+inline auto d2dy(Variable& var) {
+    return _Grad2(&var,  false, true);
+}
+
+inline auto d2dy2(Variable&& var) {
+    return _Grad2(&var,  false, true);
 }
 
 inline auto stab_x(Variable& var) {
