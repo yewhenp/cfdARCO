@@ -9,7 +9,9 @@ find_package (indicators REQUIRED)
 find_package(Matplot++ REQUIRED)
 find_package(MPI REQUIRED)
 
-add_executable(cfdARCO src/main.cpp include/abstract_mesh.hpp include/mesh2d.hpp src/mesh2d.cpp include/fvm.hpp src/fvm.cpp src/cfdarcho_main.cpp include/cfdarcho_main.hpp include/decls.hpp)
+add_executable(cfdARCO src/main.cpp include/abstract_mesh.hpp include/mesh2d.hpp src/mesh2d.cpp include/fvm.hpp
+        src/fvm.cpp src/cfdarcho_main.cpp include/cfdarcho_main.hpp include/decls.hpp include/distribution_algo.hpp
+        src/distribution_algo.cpp)
 
 target_include_directories(cfdARCO PRIVATE include)
 

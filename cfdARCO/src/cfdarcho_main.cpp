@@ -7,17 +7,16 @@
 #include <algorithm>
 #include <random>
 #include "cfdarcho_main.hpp"
+#include "distribution_algo.hpp"
 
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::node_distribution = {};
 std::vector<size_t> CFDArcoGlobalInit::current_proc_node_distribution = {};
-std::vector<size_t> CFDArcoGlobalInit::nums_nodes_per_proc = {};
-std::vector<size_t> CFDArcoGlobalInit::node_id_to_proc = {};
+std::vector<int> CFDArcoGlobalInit::node_id_to_proc = {};
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_send_distribution = {};
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_receive_distribution = {};
 Mesh2D* CFDArcoGlobalInit::mesh = nullptr;
 int CFDArcoGlobalInit::world_size = 0;
 int CFDArcoGlobalInit::world_rank = 0;
-int CFDArcoGlobalInit::num_modes_per_proc = 0;
 
 void CFDArcoGlobalInit::finalize() {
     MPI_Finalize();
@@ -46,28 +45,27 @@ std::vector<std::vector<size_t>> CFDArcoGlobalInit::get_send_perspective(std::ve
 
 void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
     mesh = _mesh;
-    num_modes_per_proc = mesh->_num_nodes / world_size;
-    node_id_to_proc.resize(mesh->_num_nodes);
 
-    int current_proc = -1;
-    size_t current_proc_num = 0;
-    bool flag = false;
-
-    for (size_t i = 0; i < mesh->_num_nodes; ++i) {
-        if (i % num_modes_per_proc == 0) {
-            current_proc += 1;
-            node_distribution.emplace_back();
-            if (flag)
-                nums_nodes_per_proc.push_back(current_proc_num);
-            current_proc_num = 0;
-            flag = true;
-        }
-        node_distribution[current_proc].push_back(mesh->_nodes[i]->_id);
-        node_id_to_proc[mesh->_nodes[i]->_id] = current_proc;
-        current_proc_num += 1;
+    std::vector<size_t> priorities(world_size, 1);
+    if (world_rank == 0) {
+        node_id_to_proc = cluster_distribution(mesh, world_size, priorities);
+    } else {
+        node_id_to_proc = std::vector<int>(mesh->_num_nodes);
     }
-    if (current_proc_num > 0)
-        nums_nodes_per_proc.push_back(current_proc_num);
+    MPI_Bcast(node_id_to_proc.data(), mesh->_num_nodes, MPI_INT, 0, MPI_COMM_WORLD);
+
+    node_distribution = std::vector<std::vector<size_t>>(world_size);
+    for (int i = 0; i < mesh->_num_nodes; ++i) {
+        node_distribution[node_id_to_proc[i]].push_back(i);
+    }
+
+    if (world_rank == 0) {
+        std::cout << "Cluster sizes: ";
+        for (int i = 0; i < world_size; ++i) {
+            std::cout << node_distribution.at(i).size() << " ";
+        }
+        std::cout << std::endl;
+    }
 
     current_proc_node_distribution = node_distribution[world_rank];
 
@@ -189,7 +187,6 @@ MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::str
 void CFDArcoGlobalInit::initialize(int argc, char **argv) {
     world_size = 0;
     world_rank = 0;
-    num_modes_per_proc = 0;
     mesh = nullptr;
 
     MPI_Init(&argc, &argv);
