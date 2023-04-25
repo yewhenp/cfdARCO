@@ -8,6 +8,7 @@
 #include <random>
 #include "cfdarcho_main.hpp"
 #include "distribution_algo.hpp"
+#include "pool_allocator.hpp"
 
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::node_distribution = {};
 std::vector<size_t> CFDArcoGlobalInit::current_proc_node_distribution = {};
@@ -17,9 +18,16 @@ std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_receive_di
 Mesh2D* CFDArcoGlobalInit::mesh = nullptr;
 int CFDArcoGlobalInit::world_size = 0;
 int CFDArcoGlobalInit::world_rank = 0;
+std::unique_ptr<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>> Allocator::cuda_mem_pool = {nullptr};
+bool Allocator::allocator_alive = false;
+bool CFDArcoGlobalInit::cuda_enabled = false;
 
 void CFDArcoGlobalInit::finalize() {
     MPI_Finalize();
+    if (cuda_enabled) {
+        Allocator::cuda_mem_pool.reset();
+        Allocator::allocator_alive = false;
+    }
 }
 
 
@@ -53,6 +61,8 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh) {
         node_id_to_proc = std::vector<int>(mesh->_num_nodes);
     }
     MPI_Bcast(node_id_to_proc.data(), mesh->_num_nodes, MPI_INT, 0, MPI_COMM_WORLD);
+
+    std::cout << "rank " << world_rank << " MPI_Bcast done" << std::endl;
 
     node_distribution = std::vector<std::vector<size_t>>(world_size);
     for (int i = 0; i < mesh->_num_nodes; ++i) {
@@ -117,6 +127,7 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
         input_buffers.emplace_back(current_proc_node_receive_distribution[i].size(), inst.cols());
         output_buffers.emplace_back(buff(current_proc_node_send_distribution[i], Eigen::all));
     }
+
     for (int i = 0; i < world_size; ++i) {
         if (i == world_rank)
             continue;
@@ -133,6 +144,12 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
     }
 
     MPI_Waitall(mpi_requests.size(), mpi_requests.data(), mpi_statuses.data());
+
+    for (const auto& st : mpi_statuses) {
+        if (st.MPI_ERROR != MPI_SUCCESS) {
+            std::cerr << "rank " << CFDArcoGlobalInit::get_rank() << " MPI error code: " << st.MPI_ERROR << std::endl;
+        }
+    }
 
     for (int i = 0; i < world_size; ++i) {
         if (i == world_rank)
@@ -184,6 +201,11 @@ MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::str
     return buff;
 }
 
+rmm::mr::cuda_memory_resource* get_cuda_resource() {
+    static rmm::mr::cuda_memory_resource res{};
+    return &res;
+}
+
 void CFDArcoGlobalInit::initialize(int argc, char **argv) {
     world_size = 0;
     world_rank = 0;
@@ -193,6 +215,30 @@ void CFDArcoGlobalInit::initialize(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 }
+
+void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh) {
+    cuda_enabled = true;
+    auto const [free, total] = rmm::detail::available_device_memory();
+    Allocator::cuda_mem_pool = std::make_unique<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>>(
+                get_cuda_resource(),
+                rmm::detail::align_up(static_cast<std::size_t>(static_cast<double>(free) * 0.8),
+                                      rmm::detail::CUDA_ALLOCATION_ALIGNMENT),
+                rmm::detail::align_up(static_cast<std::size_t>(static_cast<double>(free) * 0.9),
+                          rmm::detail::CUDA_ALLOCATION_ALIGNMENT)
+            );
+    Allocator::allocator_alive = true;
+
+    mesh->_volumes_cu = CudaDataMatrix::from_eigen(mesh->_volumes);
+    mesh->_normal_x_cu = CudaDataMatrix::from_eigen(mesh->_normal_x);
+    mesh->_normal_y_cu = CudaDataMatrix::from_eigen(mesh->_normal_y);
+    mesh->_vec_in_edge_direction_x_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_direction_x);
+    mesh->_vec_in_edge_direction_y_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_direction_y);
+    mesh->_vec_in_edge_neigh_direction_x_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_neigh_direction_x);
+    mesh->_vec_in_edge_neigh_direction_y_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_neigh_direction_y);
+    mesh->_n2_ids_cu = CudaDataMatrix::from_eigen(mesh->_n2_ids);
+}
+
+
 
 
 

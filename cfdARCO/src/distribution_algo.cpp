@@ -91,7 +91,7 @@ std::vector<int> cluster_distribution(Mesh2D* mesh, size_t num_proc, std::vector
     }
 
     double last_error = 10;
-    while (last_error > 0.01) {
+    while (last_error > 0.05) {
         std::cout << "last_error = " << last_error << std::endl;
         last_centroids = centroids;
 
@@ -184,7 +184,7 @@ std::vector<int> cluster_distribution(Mesh2D* mesh, size_t num_proc, std::vector
         node_distribution[i] = cluster_id;
     }
 
-    show_distribution(mesh, node_distribution);
+//    show_distribution(mesh, node_distribution);
 
     return node_distribution;
 }

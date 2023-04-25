@@ -3,6 +3,7 @@
 
 #include "abstract_mesh.hpp"
 #include "decls.hpp"
+#include "cuda_operators.hpp"
 #include <unordered_map>
 #include <memory>
 
@@ -104,6 +105,16 @@ public:
     MatrixX4dRB _vec_in_edge_neigh_direction_x{};
     MatrixX4dRB _vec_in_edge_neigh_direction_y{};
     MatrixX4dRB _n2_ids{};
+
+
+    CudaDataMatrix _volumes_cu{};
+    CudaDataMatrix _normal_x_cu{};
+    CudaDataMatrix _normal_y_cu{};
+    CudaDataMatrix _vec_in_edge_direction_x_cu{};
+    CudaDataMatrix _vec_in_edge_direction_y_cu{};
+    CudaDataMatrix _vec_in_edge_neigh_direction_x_cu{};
+    CudaDataMatrix _vec_in_edge_neigh_direction_y_cu{};
+    CudaDataMatrix _n2_ids_cu{};
 
 };
 

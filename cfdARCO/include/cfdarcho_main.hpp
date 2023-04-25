@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <mesh2d.hpp>
+
 #include "decls.hpp"
 
 
@@ -14,9 +15,12 @@ public:
     static std::vector<MatrixX4dRB> get_redistributed(const MatrixX4dRB& inst, const std::string& name);
     static MatrixX4dRB recombine(const MatrixX4dRB& inst, const std::string& name);
     static inline int get_rank() { return world_rank; }
+    static void enable_cuda(Mesh2D* mesh);
+    static bool cuda_enabled;
 
     CFDArcoGlobalInit(CFDArcoGlobalInit &other) = delete;
     void operator=(const CFDArcoGlobalInit &) = delete;
+
 
 private:
     ~CFDArcoGlobalInit();

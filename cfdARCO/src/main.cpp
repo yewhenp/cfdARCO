@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     bool visualize = 1;
 
     size_t L = 100;
-    size_t timesteps = 1000;
+    size_t timesteps = 100;
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
@@ -67,6 +67,10 @@ int main(int argc, char **argv) {
     mesh.compute();
 
     CFDArcoGlobalInit::make_node_distribution(&mesh);
+
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        CFDArcoGlobalInit::enable_cuda(&mesh);
+    }
 
     auto rho_initial = initial_val(&mesh, 1, 2);
     auto rho = Variable(&mesh,
@@ -165,12 +169,10 @@ int main(int argc, char **argv) {
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
     if (visualize) {
-        int i = 0;
         auto fig = matplot::figure(true);
-        for (auto& hist : rho.history) {
-            i++;
+        for (int i = 0; i < rho.history.size() - 1; ++i) {
             if (i % 10 != 0) continue;
-            auto grid_hist = to_grid(&mesh, hist);
+            auto grid_hist = to_grid(&mesh, rho.history[i]);
             if (CFDArcoGlobalInit::get_rank() == 0) {
                 auto vect = from_eigen_matrix<double>(grid_hist);
                 fig->current_axes()->image(vect);

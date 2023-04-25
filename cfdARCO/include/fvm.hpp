@@ -3,7 +3,9 @@
 
 #include "mesh2d.hpp"
 #include "decls.hpp"
+#include "cuda_operators.hpp"
 #include <optional>
+#include <tuple>
 #include <memory>
 
 class Variable;
@@ -18,6 +20,7 @@ public:
     Variable();
     Variable(Mesh2D* mesh_, Eigen::VectorXd& initial_, BoundaryFN boundary_conditions_, std::string name_="");
     Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<MatrixX4dRB(MatrixX4dRB&, MatrixX4dRB&)> op_, std::string& name_);
+    Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<CudaDataMatrix(CudaDataMatrix&, CudaDataMatrix&)> op_, std::string& name_);
     Variable(Mesh2D* mesh_, double value);
     Variable(Eigen::VectorXd& curr_);
 
@@ -31,12 +34,15 @@ public:
     void set_bound();
     void add_history();
     MatrixX4dRB estimate_grads();
+    std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grads_cu();
     _GradEstimated dx();
     _GradEstimated dy();
     std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_first_order();
+    std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_first_order_cu();
     std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_second_order();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
     virtual MatrixX4dRB evaluate();
+    virtual CudaDataMatrix evaluate_cu();
     void set_current(Eigen::VectorXd& current_);
     std::vector<Eigen::VectorXd> get_history();
     virtual void solve(Variable* equation, DT* dt);
@@ -45,8 +51,11 @@ public:
     std::string name;
     Mesh2D *mesh = nullptr;
     Eigen::VectorXd current;
+    CudaDataMatrix current_cu;
     std::vector<MatrixX4dRB> current_redist;
     std::vector<MatrixX4dRB> grad_redist;
+    std::vector<CudaDataMatrix> current_redist_cu;
+    std::vector<std::tuple<CudaDataMatrix, CudaDataMatrix>> grad_redist_cu;
     BoundaryFN boundary_conditions;
     std::vector<Eigen::VectorXd> history {};
     size_t num_nodes = 0;
@@ -58,10 +67,13 @@ public:
     std::shared_ptr<Variable> left_operand = nullptr;
     std::shared_ptr<Variable> right_operand = nullptr;
     std::function<MatrixX4dRB(MatrixX4dRB&, MatrixX4dRB&)> op;
+    std::function<CudaDataMatrix(CudaDataMatrix&, CudaDataMatrix&)> op_cu;
 
 //    cache
     bool estimate_grid_cache_valid = false;
     MatrixX4dRB estimate_grid_cache;
+
+    std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grid_cache_cu;
 
     Variable operator+(const Variable & obj_r) const;
     Variable operator-(const Variable & obj_r) const;
@@ -84,6 +96,7 @@ public:
     explicit _GradEstimated(Variable *var_, bool clc_x_=true, bool clc_y_=true);
 
     MatrixX4dRB evaluate() override;
+    CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
     Variable* var;
@@ -103,6 +116,7 @@ public:
     DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable*>&, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
     void update();
     MatrixX4dRB evaluate() override;
+    CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::function<double(double, std::vector<Variable*>&, Mesh2D* mesh)> update_fn;
@@ -139,6 +153,7 @@ public:
     _Grad(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
     MatrixX4dRB evaluate() override;
+    CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::shared_ptr<Variable> var;
@@ -164,6 +179,7 @@ public:
     _Stab(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
     MatrixX4dRB evaluate() override;
+    CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::shared_ptr<Variable> var;
