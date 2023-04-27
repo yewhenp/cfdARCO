@@ -12,6 +12,8 @@ Variable::Variable(Mesh2D* mesh_, Eigen::VectorXd &initial_, BoundaryFN boundary
         mesh{mesh_}, current{initial_}, boundary_conditions{std::move(boundary_conditions_)}, name{std::move(name_)} {
     num_nodes = mesh->_num_nodes;
     is_basically_created = true;
+    if (CFDArcoGlobalInit::cuda_enabled)
+        current_cu = CudaDataMatrix::from_eigen(current);
 }
 
 Variable::Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_,
@@ -214,23 +216,11 @@ std::tuple<CudaDataMatrix, CudaDataMatrix> Variable::estimate_grads_cu() {
         current_redist_cu.push_back(CudaDataMatrix::from_eigen(elem));
     }
 
-    current_cu = CudaDataMatrix::from_eigen(current);
+    auto grad_xd = CudaDataMatrix(current_cu._size, 0);
+    auto grad_yd = CudaDataMatrix(current_cu._size, 0);
 
-    auto grad_x = CudaDataMatrix(current_cu._size, 0);
-    auto grad_y = CudaDataMatrix(current_cu._size, 0);
-
-    for (int j = 0; j < 4; ++j) {
-        auto current_n2_cu = current_redist_cu[j];
-        auto val = (current_cu + current_n2_cu) / CudaDataMatrix(current_cu._size, 2);
-        auto pre_ret_x = mul_mtrx_rowjump(mesh->_normal_x_cu, val, current_cu._size, 4, j);
-        auto pre_ret_y = mul_mtrx_rowjump(mesh->_normal_y_cu, val, current_cu._size, 4, j);
-
-        grad_x = grad_x + pre_ret_x;
-        grad_y = grad_y + pre_ret_y;
-    }
-
-    auto grad_xd = grad_x / mesh->_volumes_cu;
-    auto grad_yd = grad_y / mesh->_volumes_cu;
+    estimate_grads_kern(current_redist_cu, current_cu, mesh->_normal_x_cu, mesh->_normal_y_cu, mesh->_volumes_cu,
+                        grad_xd, grad_yd);
 
     estimate_grid_cache_cu = {grad_xd, grad_yd};
     estimate_grid_cache_valid = true;
@@ -240,8 +230,7 @@ std::tuple<CudaDataMatrix, CudaDataMatrix> Variable::estimate_grads_cu() {
     auto grads_cu = from_multiple_cols({grad_xd, grad_yd});
     auto grads_redist = CFDArcoGlobalInit::get_redistributed(grads_cu.to_eigen(num_nodes, 2), send_name);
     grad_redist_cu = {};
-    for (int i = 0; i < grads_redist.size(); ++i) {
-        auto& grads_i_cu = grads_redist[i];
+    for (auto & grads_i_cu : grads_redist) {
         grad_redist_cu.emplace_back(CudaDataMatrix::from_eigen(grads_i_cu.col(0).eval()), CudaDataMatrix::from_eigen(grads_i_cu.col(1).eval()));
     }
     return estimate_grid_cache_cu;
@@ -314,6 +303,10 @@ std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_f
         return {op(left_eval1, right_eval1), op(left_eval2, right_eval2), op(left_eval3, right_eval3)};
     }
 
+    if (get_first_order_cache_valid) {
+        return get_first_order_cache;
+    }
+
     auto grads = estimate_grads();
     auto grads_self_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
     auto grads_self_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
@@ -356,7 +349,9 @@ std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_f
     ret_l.col(2) = val_neigh.col(2);
     ret_l.col(3) = val_self.col(3);
 
-    return {ret_sum, ret_r, ret_l};
+    get_first_order_cache = {ret_sum, ret_r, ret_l};
+    get_first_order_cache_valid = true;
+    return get_first_order_cache;
 }
 
 std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> Variable::get_interface_vars_first_order_cu() {
@@ -367,51 +362,37 @@ std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> Variable::get_interfa
         return {op_cu(left_eval1, right_eval1), op_cu(left_eval2, right_eval2), op_cu(left_eval3, right_eval3)};
     }
 
+    if (get_first_order_cache_valid) {
+        return get_first_order_cache_cu;
+    }
+
     auto grads = estimate_grads_cu();
 
     auto grads_x = std::get<0>(grads);
     auto grads_y = std::get<1>(grads);
 
-    std::vector<CudaDataMatrix> grads_self_x_v, grads_self_y_v, grads_neigh_x_v, grads_neigh_y_v, cur_self_v, cur_neigh_v;
+    CudaDataMatrix ret_sum_cu{current_cu._size * 4};
+    CudaDataMatrix ret_r_cu{current_cu._size * 4};
+    CudaDataMatrix ret_l_cu{current_cu._size * 4};
 
-    for (int j = 0; j < 4; ++j) {
-        grads_self_x_v.push_back(grads_x);
-        grads_self_y_v.push_back(grads_y);
-        grads_neigh_x_v.push_back(std::get<0>(grad_redist_cu[j]));
-        grads_neigh_y_v.push_back(std::get<1>(grad_redist_cu[j]));
-        cur_self_v.push_back(current_cu);
-        cur_neigh_v.push_back(current_redist_cu[j]);
-    }
+    get_interface_vars_first_order_kern(
+            grads_x,
+            grads_y,
+            grad_redist_cu,
+            current_cu,
+            current_redist_cu,
+            mesh->_vec_in_edge_direction_x_cu,
+            mesh->_vec_in_edge_direction_y_cu,
+            mesh->_vec_in_edge_neigh_direction_x_cu,
+            mesh->_vec_in_edge_neigh_direction_y_cu,
+            ret_sum_cu,
+            ret_r_cu,
+            ret_l_cu
+    );
 
-    auto cur_self_cu = from_multiple_cols(cur_self_v);
-    auto cur_neigh_cu = from_multiple_cols(cur_neigh_v);
-    auto grads_self_x_cu = from_multiple_cols(grads_self_x_v);
-    auto grads_self_y_cu = from_multiple_cols(grads_self_y_v);
-    auto grads_neigh_x_cu = from_multiple_cols(grads_neigh_x_v);
-    auto grads_neigh_y_cu = from_multiple_cols(grads_neigh_y_v);
-
-    auto grads_self_xd = grads_self_x_cu * mesh->_vec_in_edge_direction_x_cu;
-    auto grads_self_yd = grads_self_y_cu * mesh->_vec_in_edge_direction_y_cu;
-    auto grads_neigh_xd = grads_neigh_x_cu * mesh->_vec_in_edge_neigh_direction_x_cu;
-    auto grads_neigh_yd = grads_neigh_y_cu * mesh->_vec_in_edge_neigh_direction_y_cu;
-
-    auto val_self_cu = grads_self_xd + grads_self_yd + cur_self_cu;
-    auto val_neigh_cu = grads_neigh_xd + grads_neigh_yd + cur_neigh_cu;
-
-    auto ret_sum_cu = (val_self_cu + val_neigh_cu) / CudaDataMatrix(val_self_cu._size, 2);
-
-    auto ret_r_cu = from_multiple_cols({get_col(val_neigh_cu, num_nodes, 4, 0),
-                                        get_col(val_self_cu, num_nodes, 4, 1),
-                                        get_col(val_self_cu, num_nodes, 4, 2),
-                                        get_col(val_neigh_cu, num_nodes, 4, 3)
-    });
-    auto ret_l_cu = from_multiple_cols({get_col(val_self_cu, num_nodes, 4, 0),
-                                        get_col(val_neigh_cu, num_nodes, 4, 1),
-                                        get_col(val_neigh_cu, num_nodes, 4, 2),
-                                        get_col(val_self_cu, num_nodes, 4, 3)
-                                       });
-
-    return {ret_sum_cu, ret_r_cu, ret_l_cu};
+    get_first_order_cache_cu = {ret_sum_cu, ret_r_cu, ret_l_cu};
+    get_first_order_cache_valid = true;
+    return get_first_order_cache_cu;
 }
 
 
@@ -431,7 +412,6 @@ MatrixX4dRB Variable::evaluate() {
 
 CudaDataMatrix Variable::evaluate_cu() {
     if (!is_subvariable) {
-        current_cu = CudaDataMatrix::from_eigen(current);
         return current_cu;
     }
 
@@ -443,6 +423,10 @@ CudaDataMatrix Variable::evaluate_cu() {
 void Variable::set_current(Eigen::VectorXd &current_) {
     current = current_;
     estimate_grid_cache_valid = false;
+    get_first_order_cache_valid = false;
+    if (CFDArcoGlobalInit::cuda_enabled) {
+        current_cu = CudaDataMatrix::from_eigen(current);
+    }
 }
 
 std::vector<Eigen::VectorXd> Variable::get_history() {
@@ -641,16 +625,17 @@ MatrixX4dRB _Grad::evaluate() {
     auto current_interface_gradients = var->get_interface_vars_first_order();
     auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
 
-    auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
-    auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
-
     if (clc_x && clc_y) {
+        auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
+        auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
         return res_x + res_y;
     }
     if (clc_x) {
+        auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
         return res_x;
     }
     if (clc_y) {
+        auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
         return res_y;
     }
     return MatrixX4dRB{};
@@ -660,16 +645,17 @@ CudaDataMatrix _Grad::evaluate_cu() {
     auto current_interface_gradients = var->get_interface_vars_first_order_cu();
     auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
 
-    auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu, mesh->_num_nodes, 4);
-    auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu, mesh->_num_nodes, 4);
-
     if (clc_x && clc_y) {
+        auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu, mesh->_num_nodes, 4);
+        auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu, mesh->_num_nodes, 4);
         return res_x + res_y;
     }
     if (clc_x) {
+        auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu, mesh->_num_nodes, 4);
         return res_x;
     }
     if (clc_y) {
+        auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu, mesh->_num_nodes, 4);
         return res_y;
     }
     return CudaDataMatrix{};
@@ -745,16 +731,17 @@ MatrixX4dRB _Stab::evaluate() {
     auto current_interface_gradients = var->get_interface_vars_first_order();
     auto current_interface_gradients_star = (std::get<2>(current_interface_gradients) - std::get<1>(current_interface_gradients)) / 2;
 
-    auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
-    auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
-
     if (clc_x && clc_y) {
+        auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
+        auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
         return res_x + res_y;
     }
     if (clc_x) {
+        auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
         return res_x;
     }
     if (clc_y) {
+        auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
         return res_y;
     }
     return MatrixX4dRB{};
@@ -762,18 +749,19 @@ MatrixX4dRB _Stab::evaluate() {
 
 CudaDataMatrix _Stab::evaluate_cu() {
     auto current_interface_gradients = var->get_interface_vars_first_order_cu();
-    auto current_interface_gradients_star = (std::get<2>(current_interface_gradients) - std::get<1>(current_interface_gradients)) / CudaDataMatrix{std::get<2>(current_interface_gradients)._size, 2};
-
-    auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu, mesh->_num_nodes, 4);
-    auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu, mesh->_num_nodes, 4);
+    auto current_interface_gradients_star = div_const(std::get<2>(current_interface_gradients) - std::get<1>(current_interface_gradients), 2);
 
     if (clc_x && clc_y) {
+        auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu, mesh->_num_nodes, 4);
+        auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu, mesh->_num_nodes, 4);
         return res_x + res_y;
     }
     if (clc_x) {
+        auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu, mesh->_num_nodes, 4);
         return res_x;
     }
     if (clc_y) {
+        auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu, mesh->_num_nodes, 4);
         return res_y;
     }
     return CudaDataMatrix{};
@@ -783,6 +771,7 @@ void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_va
     Eigen::VectorXd current;
     if (CFDArcoGlobalInit::cuda_enabled) {
         auto current_cu = equation->evaluate_cu();
+        cudaDeviceSynchronize();
         current = current_cu.to_eigen(set_var->mesh->_num_nodes, 1);
     } else {
         current = equation->evaluate();
@@ -822,6 +811,7 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
         for (auto& equation : equation_system) {
             auto left_part = std::get<0>(equation);
             auto& right_part = std::get<2>(equation);
+//            std::cout << "starting " << right_part.name << std::endl;
             left_part->solve(&right_part, dt);
         }
 

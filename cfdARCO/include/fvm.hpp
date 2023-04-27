@@ -71,9 +71,12 @@ public:
 
 //    cache
     bool estimate_grid_cache_valid = false;
+    bool get_first_order_cache_valid = false;
     MatrixX4dRB estimate_grid_cache;
+    std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_first_order_cache;
 
     std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grid_cache_cu;
+    std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_first_order_cache_cu;
 
     Variable operator+(const Variable & obj_r) const;
     Variable operator-(const Variable & obj_r) const;
@@ -246,6 +249,14 @@ inline auto stab_y(Variable& var) {
 
 inline auto stab_y(Variable&& var) {
     return _Stab(&var,  false, true);
+}
+
+inline auto stab_tot(Variable& var) {
+    return _Stab(&var, true, true);
+}
+
+inline auto stab_tot(Variable&& var) {
+    return _Stab(&var, true, true);
 }
 
 

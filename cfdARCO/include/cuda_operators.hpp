@@ -36,8 +36,12 @@ public:
         auto* ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(double));
         data = std::shared_ptr<double> (static_cast<double*>(ptr), CudaDeleter{size});
 
-        std::vector<double> copy_mem(size, const_val);
-        cudaMemcpy(data.get(), copy_mem.data(), _size * sizeof(double), cudaMemcpyHostToDevice);
+        if (std::abs(const_val) <= 0.000001) {
+            cudaMemset(data.get(), 0, _size * sizeof(double));
+        } else {
+            std::vector<double> copy_mem(size, const_val);
+            cudaMemcpy(data.get(), copy_mem.data(), _size * sizeof(double), cudaMemcpyHostToDevice);
+        }
     }
 
     MatrixX4dRB to_eigen(int rows, int cols) {
@@ -67,6 +71,29 @@ CudaDataMatrix mul_mtrx_rowwice(const CudaDataMatrix& a, const CudaDataMatrix& b
 CudaDataMatrix mul_mtrx_rowjump(const CudaDataMatrix& a, const CudaDataMatrix& b, int rows, int cols, int col_id);
 CudaDataMatrix from_multiple_cols(const std::vector<CudaDataMatrix>& a);
 CudaDataMatrix get_col(const CudaDataMatrix& a, int rows, int cols, int col_id);
+CudaDataMatrix div_const(const CudaDataMatrix& a, const double b);
+void estimate_grads_kern(const std::vector<CudaDataMatrix>& current_redist_cu,
+                                   const CudaDataMatrix& current_cu,
+                                   const CudaDataMatrix& normal_x_cu,
+                                   const CudaDataMatrix& normal_y_cu,
+                                   const CudaDataMatrix& volumes_cu,
+                                   CudaDataMatrix& grad_x,
+                                   CudaDataMatrix& grad_y
+);
+void get_interface_vars_first_order_kern(
+        const CudaDataMatrix& grad_x,
+        const CudaDataMatrix& grad_y,
+        const std::vector<std::tuple<CudaDataMatrix, CudaDataMatrix>>& grad_redist_cu,
+        const CudaDataMatrix& current_cu,
+        const std::vector<CudaDataMatrix>& current_redist_cu,
+        const CudaDataMatrix& vec_in_edge_direction_x_cu,
+        const CudaDataMatrix& vec_in_edge_direction_y_cu,
+        const CudaDataMatrix& vec_in_edge_neigh_direction_x_cu,
+        const CudaDataMatrix& vec_in_edge_neigh_direction_y_cu,
+        CudaDataMatrix& ret_sum_cu,
+        CudaDataMatrix& ret_r_cu,
+        CudaDataMatrix& ret_l_cu
+);
 
 inline CudaDataMatrix operator+(const CudaDataMatrix& obj_l, const CudaDataMatrix& obj_r) {
     return add_mtrx(obj_l, obj_r);

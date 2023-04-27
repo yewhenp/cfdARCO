@@ -44,12 +44,9 @@ Eigen::VectorXd boundary_none(Mesh2D* mesh, Eigen::VectorXd& arr) {
 }
 
 Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
-    for (int i = 0; i < mesh->_num_nodes; ++i) {
-        if (mesh->_nodes[i]->is_boundary()) {
-            arr(i) = copy_var(i);
-        }
-    }
-    return arr;
+    auto arr1 = arr.cwiseProduct(mesh->_node_is_boundary_reverce);
+    auto copy_var1 = copy_var.cwiseProduct(mesh->_node_is_boundary);
+    return arr1 + copy_var1;
 }
 
 int main(int argc, char **argv) {
@@ -57,8 +54,8 @@ int main(int argc, char **argv) {
 
     bool visualize = 1;
 
-    size_t L = 100;
-    size_t timesteps = 100;
+    size_t L = 300;
+    size_t timesteps = 1000;
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
@@ -66,9 +63,9 @@ int main(int argc, char **argv) {
     mesh.init_basic_internals();
     mesh.compute();
 
-    CFDArcoGlobalInit::make_node_distribution(&mesh);
+    CFDArcoGlobalInit::make_node_distribution(&mesh, {10, 1, 1, 1, 1, 1, 1, 1, 1});
 
-    if (CFDArcoGlobalInit::get_rank() == 0) {
+    if (CFDArcoGlobalInit::get_rank() < 2 ) {
         CFDArcoGlobalInit::enable_cuda(&mesh);
     }
 
@@ -96,13 +93,6 @@ int main(int argc, char **argv) {
                         p_initial,
                         [& p_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, p_initial); },
                         "p");
-
-    Eigen::VectorXd zeros = Eigen::VectorXd{mesh._num_nodes};
-    zeros.setConstant(0.0);
-    auto rho_t_h = Variable(&mesh, zeros, boundary_none, "rho_t_h");
-    auto u_t_h = Variable(&mesh,zeros, boundary_none, "u_t_h");
-    auto v_t_h = Variable(&mesh, zeros, boundary_none, "v_t_h");
-    auto p_t_h = Variable(&mesh, zeros, boundary_none, "p_t_h");
 
     Eigen::VectorXd mass_initial = rho.current.array() * mesh._volumes.array();
     auto mass = Variable(&mesh,
@@ -138,25 +128,16 @@ int main(int argc, char **argv) {
             {&v,          '=', rho_v / rho / mesh._volumes},
             {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
 
-            {&rho_t_h,    '=', rho - 0.5 * dt * (u * rho.dx() + rho * u.dx() + v * rho.dy() + rho * v.dy())},
-            {&u_t_h,      '=', u - 0.5 * dt * (u * u.dx() + v * u.dy() + (1 / rho) * p.dx())},
-            {&v_t_h,      '=', v - 0.5 * dt * (u * v.dx() + v * v.dy() + (1 / rho) * p.dy())},
-            {&p_t_h,      '=', p - 0.5 * dt * (gamma * p * (u.dx() + v.dy()) + u * p.dx() + v * p.dy())},
+            {&rho,    '=', rho - 0.5 * dt * (u * rho.dx() + rho * u.dx() + v * rho.dy() + rho * v.dy())},
+            {&u,      '=', u - 0.5 * dt * (u * u.dx() + v * u.dy() + (1 / rho) * p.dx())},
+            {&v,      '=', v - 0.5 * dt * (u * v.dx() + v * v.dy() + (1 / rho) * p.dy())},
+            {&p,      '=', p - 0.5 * dt * (gamma * p * (u.dx() + v.dy()) + u * p.dx() + v * p.dy())},
 
-            {&rho,        '=', rho_t_h * 1},
-            {&u,          '=', u_t_h * 1},
-            {&v,          '=', v_t_h * 1},
-            {&p,          '=', p_t_h * 1},
+            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - stab_tot(rho) * 2)},
+            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - stab_tot(rho * u) * 2)},
+            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - stab_tot(rho * v) * 2)},
+            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - stab_tot(E) * 2)},
 
-            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - (stab_x(rho) + stab_y(rho)) * 2)},
-            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - (stab_x(rho * u) + stab_y(rho * u)) * 2)},
-            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - (stab_x(rho * v) + stab_y(rho * v)) * 2)},
-            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - (stab_x(E) + stab_y(E)) * 2)},
-
-            {&rho,        '=', mass / mesh._volumes},
-            {&u,          '=', rho_u / rho / mesh._volumes},
-            {&v,          '=', rho_v / rho / mesh._volumes},
-            {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
     };
 
     auto equation = Equation(timesteps);

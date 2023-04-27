@@ -96,6 +96,8 @@ public:
     MatrixX4dRB _vec_in_edge_neigh_direction_x_tot{};
     MatrixX4dRB _vec_in_edge_neigh_direction_y_tot{};
     MatrixX4dRB _n2_ids_tot{};
+    MatrixX4dRB _node_is_boundary_tot{};
+    MatrixX4dRB _node_is_boundary_reverce_tot{};
 
     Eigen::VectorXd _volumes{};
     MatrixX4dRB _normal_x{};
@@ -105,7 +107,8 @@ public:
     MatrixX4dRB _vec_in_edge_neigh_direction_x{};
     MatrixX4dRB _vec_in_edge_neigh_direction_y{};
     MatrixX4dRB _n2_ids{};
-
+    MatrixX4dRB _node_is_boundary{};
+    MatrixX4dRB _node_is_boundary_reverce{};
 
     CudaDataMatrix _volumes_cu{};
     CudaDataMatrix _normal_x_cu{};

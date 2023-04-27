@@ -118,12 +118,21 @@ void Mesh2D::compute() {
     _vec_in_edge_direction_y_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
     _vec_in_edge_neigh_direction_x_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
     _vec_in_edge_neigh_direction_y_tot = Eigen::MatrixX4d {_num_nodes_tot, 4};
+    _node_is_boundary_tot = Eigen::MatrixXd {_num_nodes_tot, 1 };
+    _node_is_boundary_reverce_tot = Eigen::MatrixXd {_num_nodes_tot, 1};
     for (size_t i = 0; i < _num_nodes_tot; ++i) {
         auto& node = _nodes.at(i);
         Eigen::Vector4d norm_v_x {node->_normals.block<4, 1>(0, 0)};
         Eigen::Vector4d norm_v_y {node->_normals.block<4, 1>(0, 1)};
         _normal_x_tot.block<1, 4>(node->_id, 0) = norm_v_x;
         _normal_y_tot.block<1, 4>(node->_id, 0) = norm_v_y;
+        if (node->is_boundary()) {
+            _node_is_boundary_tot(i, 0) = 1.;
+            _node_is_boundary_reverce_tot(i, 0) = 0.;
+        } else {
+            _node_is_boundary_tot(i, 0) = 0.;
+            _node_is_boundary_reverce_tot(i, 0) = 1.;
+        }
 
         for (int j = 0; j < node->_edges_id.size(); ++j) {
             auto edge_id = node->_edges_id.at(j);
@@ -157,6 +166,8 @@ void Mesh2D::compute() {
     _vec_in_edge_neigh_direction_x = _vec_in_edge_neigh_direction_x_tot;
     _vec_in_edge_neigh_direction_y = _vec_in_edge_neigh_direction_y_tot;
     _n2_ids = _n2_ids_tot;
+    _node_is_boundary = _node_is_boundary_tot;
+    _node_is_boundary_reverce = _node_is_boundary_reverce_tot;
 }
 
 void Mesh2D::init_basic_internals() {

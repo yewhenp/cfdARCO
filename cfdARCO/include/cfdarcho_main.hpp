@@ -11,7 +11,7 @@ class CFDArcoGlobalInit {
 public:
     static void initialize(int argc, char** argv);
     static void finalize();
-    static void make_node_distribution(Mesh2D* _mesh);
+    static void make_node_distribution(Mesh2D* _mesh, std::vector<size_t> priorities = {});
     static std::vector<MatrixX4dRB> get_redistributed(const MatrixX4dRB& inst, const std::string& name);
     static MatrixX4dRB recombine(const MatrixX4dRB& inst, const std::string& name);
     static inline int get_rank() { return world_rank; }
