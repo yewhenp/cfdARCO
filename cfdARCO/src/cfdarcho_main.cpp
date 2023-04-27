@@ -8,7 +8,7 @@
 #include <random>
 #include "cfdarcho_main.hpp"
 #include "distribution_algo.hpp"
-#include "pool_allocator.hpp"
+#include "cuda_operators.hpp"
 
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::node_distribution = {};
 std::vector<size_t> CFDArcoGlobalInit::current_proc_node_distribution = {};
@@ -18,16 +18,17 @@ std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_receive_di
 Mesh2D* CFDArcoGlobalInit::mesh = nullptr;
 int CFDArcoGlobalInit::world_size = 0;
 int CFDArcoGlobalInit::world_rank = 0;
-std::unique_ptr<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>> Allocator::cuda_mem_pool = {nullptr};
-bool Allocator::allocator_alive = false;
 bool CFDArcoGlobalInit::cuda_enabled = false;
 
 void CFDArcoGlobalInit::finalize() {
     MPI_Finalize();
+
+#ifdef CFDARCHO_CUDA_ENABLE
     if (cuda_enabled) {
         Allocator::cuda_mem_pool.reset();
         Allocator::allocator_alive = false;
     }
+#endif
 }
 
 
@@ -204,10 +205,12 @@ MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::str
     return buff;
 }
 
+#ifdef CFDARCHO_CUDA_ENABLE
 rmm::mr::cuda_memory_resource* get_cuda_resource() {
     static rmm::mr::cuda_memory_resource res{};
     return &res;
 }
+#endif
 
 void CFDArcoGlobalInit::initialize(int argc, char **argv) {
     world_size = 0;
@@ -220,6 +223,11 @@ void CFDArcoGlobalInit::initialize(int argc, char **argv) {
 }
 
 void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh) {
+
+#ifndef CFDARCHO_CUDA_ENABLE
+    throw std::runtime_error{"CUDA not available"};
+#else
+
     cuda_enabled = true;
     auto const [free, total] = rmm::detail::available_device_memory();
     Allocator::cuda_mem_pool = std::make_unique<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>>(
@@ -239,6 +247,8 @@ void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh) {
     mesh->_vec_in_edge_neigh_direction_x_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_neigh_direction_x);
     mesh->_vec_in_edge_neigh_direction_y_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_neigh_direction_y);
     mesh->_n2_ids_cu = CudaDataMatrix::from_eigen(mesh->_n2_ids);
+
+#endif
 }
 
 

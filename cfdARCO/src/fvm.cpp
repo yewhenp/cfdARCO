@@ -771,7 +771,7 @@ void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_va
     Eigen::VectorXd current;
     if (CFDArcoGlobalInit::cuda_enabled) {
         auto current_cu = equation->evaluate_cu();
-        cudaDeviceSynchronize();
+        sync_device();
         current = current_cu.to_eigen(set_var->mesh->_num_nodes, 1);
     } else {
         current = equation->evaluate();

@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
 
     bool visualize = 1;
 
-    size_t L = 300;
+    size_t L = 100;
     size_t timesteps = 1000;
     double CFL = 0.5;
     double gamma = 5. / 3.;
