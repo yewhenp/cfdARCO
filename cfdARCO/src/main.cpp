@@ -53,7 +53,7 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 int main(int argc, char **argv) {
     CFDArcoGlobalInit::initialize(argc, argv);
 
-    bool visualize = 0;
+    bool visualize = 1, create_plot = 0;
 
     size_t L = 100;
     size_t timesteps = 1000;
@@ -150,9 +150,9 @@ int main(int argc, char **argv) {
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
-    if (CFDArcoGlobalInit::get_rank() == 0) store_history({&rho}, &mesh);
+    store_history({&rho}, &mesh);
 
-    if (visualize) {
+    if (visualize && create_plot) {
         auto fig = matplot::figure(true);
         for (int i = 0; i < rho.history.size() - 1; ++i) {
             if (i % 10 != 0) continue;
