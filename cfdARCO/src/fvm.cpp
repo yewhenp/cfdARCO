@@ -830,7 +830,7 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
     }
 }
 
-MatrixX4dRB to_grid(Mesh2D* mesh, Eigen::VectorXd& values_half) {
+MatrixX4dRB to_grid(const Mesh2D* mesh, Eigen::VectorXd& values_half) {
     auto values = CFDArcoGlobalInit::recombine(values_half, "to_grid");
     MatrixX4dRB result = {mesh->_x, mesh->_y};
     for (auto& node : mesh->_nodes_tot) {
@@ -839,5 +839,31 @@ MatrixX4dRB to_grid(Mesh2D* mesh, Eigen::VectorXd& values_half) {
         size_t y_coord = node->_id % mesh->_x;
         result(x_coord, y_coord) = value;
     }
+    return result;
+}
+
+
+MatrixX4dRB to_grid_local(const Mesh2D* mesh, Eigen::VectorXd& values) {
+    MatrixX4dRB result = {mesh->_x, mesh->_y};
+    for (auto& node : mesh->_nodes) {
+        double value = values(node->_id);
+        size_t x_coord = node->_id / mesh->_x;
+        size_t y_coord = node->_id % mesh->_x;
+        result(x_coord, y_coord) = value;
+    }
+    return result;
+}
+
+
+Eigen::VectorXd from_grid(const Mesh2D* mesh, MatrixX4dRB& grid) {
+    Eigen::VectorXd result {mesh->_num_nodes};
+
+    for (auto& node : mesh->_nodes) {
+        size_t x_coord = node->_id / mesh->_x;
+        size_t y_coord = node->_id % mesh->_x;
+        double value = grid(x_coord, y_coord);
+        result(node->_id) = value;
+    }
+
     return result;
 }

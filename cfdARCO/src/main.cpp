@@ -9,6 +9,7 @@
 #include "mesh2d.hpp"
 #include "fvm.hpp"
 #include "cfdarcho_main.hpp"
+#include "io_operators.hpp"
 
 
 Eigen::VectorXd initial_val(Mesh2D* mesh, double val_out, double val_in) {
@@ -52,7 +53,7 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 int main(int argc, char **argv) {
     CFDArcoGlobalInit::initialize(argc, argv);
 
-    bool visualize = 1;
+    bool visualize = 0;
 
     size_t L = 100;
     size_t timesteps = 1000;
@@ -63,11 +64,11 @@ int main(int argc, char **argv) {
     mesh.init_basic_internals();
     mesh.compute();
 
-    CFDArcoGlobalInit::make_node_distribution(&mesh, {10, 1, 1, 1, 1, 1, 1, 1, 1});
+    CFDArcoGlobalInit::make_node_distribution(&mesh, {});
 
-    if (CFDArcoGlobalInit::get_rank() < 2 ) {
-        CFDArcoGlobalInit::enable_cuda(&mesh);
-    }
+//    if (CFDArcoGlobalInit::get_rank() < 2 ) {
+//        CFDArcoGlobalInit::enable_cuda(&mesh);
+//    }
 
     auto rho_initial = initial_val(&mesh, 1, 2);
     auto rho = Variable(&mesh,
@@ -148,6 +149,8 @@ int main(int argc, char **argv) {
     equation.evaluate(all_vars, equation_system, &dt, visualize);
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
+
+    if (CFDArcoGlobalInit::get_rank() == 0) store_history({&rho}, &mesh);
 
     if (visualize) {
         auto fig = matplot::figure(true);

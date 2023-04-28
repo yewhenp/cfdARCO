@@ -275,7 +275,9 @@ public:
 };
 
 
-MatrixX4dRB to_grid(Mesh2D* mesh, Eigen::VectorXd& values);
+MatrixX4dRB to_grid(const Mesh2D* mesh, Eigen::VectorXd& values);
+MatrixX4dRB to_grid_local(const Mesh2D* mesh, Eigen::VectorXd& values);
+Eigen::VectorXd from_grid(const Mesh2D* mesh, MatrixX4dRB& grid);
 
 template<typename Scalar, typename Matrix>
 inline static std::vector< std::vector<Scalar> > from_eigen_matrix( const Matrix & M ){
