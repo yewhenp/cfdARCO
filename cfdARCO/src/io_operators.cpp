@@ -2,6 +2,8 @@
 #include "cfdarcho_main.hpp"
 #include <chrono>
 #include <ctime>
+#include <iostream>
+#include <fstream>
 
 #include <nlohmann/json.hpp>
 
