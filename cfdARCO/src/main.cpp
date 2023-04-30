@@ -68,6 +68,8 @@ int main(int argc, char **argv) {
             .default_value(2)
             .scan<'i', int>();
     program.add_argument("-s", "--store").default_value(false).implicit_value(true);
+    program.add_argument("-st", "--store_stepping").default_value(false).implicit_value(true);
+    program.add_argument("--skip_history").default_value(false).implicit_value(true);
     program.add_argument("-d", "--dist")
             .default_value(std::string("cl"));
     program.add_argument("-p", "--priorities")
@@ -84,7 +86,7 @@ int main(int argc, char **argv) {
         std::exit(1);
     }
 
-    CFDArcoGlobalInit::initialize(argc, argv);
+    CFDArcoGlobalInit::initialize(argc, argv, program.get<bool>("skip_history"));
 
     bool visualize = program.get<bool>("visualize");
     bool create_plot = program.get<bool>("create_plot");
@@ -113,7 +115,7 @@ int main(int argc, char **argv) {
     CFDArcoGlobalInit::make_node_distribution(&mesh, dist, priorities);
 
     if (program.get<bool>("cuda_enable") && CFDArcoGlobalInit::get_rank() < program.get<int>("cuda_ranks") ) {
-        CFDArcoGlobalInit::enable_cuda(&mesh);
+        CFDArcoGlobalInit::enable_cuda(&mesh, program.get<int>("cuda_ranks"));
     }
 
     auto rho_initial = initial_val(&mesh, 1, 2);
@@ -191,13 +193,19 @@ int main(int argc, char **argv) {
 
     std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
 
+    if (program.get<bool>("store_stepping")) init_store_history_stepping({&rho}, &mesh);
+
     auto begin = std::chrono::steady_clock::now();
-    equation.evaluate(all_vars, equation_system, &dt, visualize);
+    equation.evaluate(all_vars, equation_system, &dt, visualize, {&rho});
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
     if (program.get<bool>("store")) {
-        store_history({&rho}, &mesh);
+        if (program.get<bool>("store_stepping")) {
+            finalize_history_stepping();
+        } else {
+            store_history({&rho}, &mesh);
+        }
     }
 
     if (visualize && create_plot) {

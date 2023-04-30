@@ -4,6 +4,7 @@
 
 #include "fvm.hpp"
 #include "cfdarcho_main.hpp"
+#include "io_operators.hpp"
 
 #include <utility>
 #include <indicators/progress_bar.hpp>
@@ -166,7 +167,8 @@ void Variable::set_bound() {
 }
 
 void Variable::add_history() {
-    history.push_back({current});
+    if (!CFDArcoGlobalInit::skip_history)
+        history.push_back({current});
 }
 
 MatrixX4dRB Variable::estimate_grads() {
@@ -783,7 +785,8 @@ void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_va
 Equation::Equation(size_t timesteps_) : timesteps{timesteps_} {}
 
 void Equation::evaluate(std::vector<Variable*> &all_vars,
-                        std::vector<std::tuple<Variable*, char, Variable>> &equation_system, DT* dt, bool visualize) {
+                        std::vector<std::tuple<Variable*, char, Variable>> &equation_system, DT* dt, bool visualize,
+                        std::vector<Variable*> store_vars) {
     double t_val = 0;
     indicators::ProgressBar bar{
             indicators::option::BarWidth{50},
@@ -824,9 +827,9 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
             double progress = (static_cast<double>(t) / static_cast<double>(timesteps)) * 100;
             bar.set_progress(static_cast<size_t>(progress));
             bar.set_option(indicators::option::PostfixText{std::to_string(progress) + " %"});
-
-//            std::cout << t_val << std::endl;
         }
+
+        if (CFDArcoGlobalInit::store_stepping) store_history_stepping(store_vars, store_vars.at(0)->mesh, t);
     }
 }
 

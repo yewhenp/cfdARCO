@@ -13,7 +13,7 @@
 
 
 int main(int argc, char **argv) {
-    CFDArcoGlobalInit::initialize(argc, argv);
+    CFDArcoGlobalInit::initialize(argc, argv, false);
     auto [mesh, vars] = read_history();
 
     auto& rho = vars.at(0);

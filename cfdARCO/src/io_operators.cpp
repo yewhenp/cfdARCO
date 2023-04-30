@@ -10,20 +10,12 @@
 using json = nlohmann::json;
 
 void store_history(const std::vector<Variable*>& vars_to_store, const Mesh2D* mesh, const fs::path& store_path) {
-    std::time_t t = std::time(0);
-    std::tm *now = std::localtime(&t);
-    std::string timestamp = std::to_string(now->tm_year + 1900) + "_" + std::to_string(now->tm_mon + 1) + "_" +
-                            std::to_string(now->tm_mday) + "_" + std::to_string(now->tm_hour) + "_" +
-                            std::to_string(now->tm_min) +
-                            "_" + std::to_string(now->tm_sec);
-
-    auto store_dir = store_path / ("run_" + timestamp);
     if (CFDArcoGlobalInit::get_rank() == 0) {
-        fs::create_directories(store_dir);
+        fs::create_directories(CFDArcoGlobalInit::store_dir);
     }
     for(auto var : vars_to_store) {
 
-        auto store_var_dir = store_dir / var->name;
+        auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
         fs::create_directories(store_var_dir);
 
         for (int i = 0; i < var->history.size() - 1; ++i) {
@@ -47,12 +39,65 @@ void store_history(const std::vector<Variable*>& vars_to_store, const Mesh2D* me
     }
 
     if (CFDArcoGlobalInit::get_rank() == 0) {
-        store_mesh(mesh, store_dir);
+        store_mesh(mesh, CFDArcoGlobalInit::store_dir);
         auto store_dir_latest = store_path / "run_latest";
         fs::remove_all(store_dir_latest);
         const auto copy_options = fs::copy_options::update_existing | fs::copy_options::recursive;
-        fs::copy(store_dir, store_dir_latest, copy_options);
+        fs::copy(CFDArcoGlobalInit::store_dir, store_dir_latest, copy_options);
 
+    }
+}
+
+
+void init_store_history_stepping(const std::vector<Variable*>& vars_to_store, const Mesh2D* mesh, const fs::path& store_path) {
+    CFDArcoGlobalInit::store_stepping = true;
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        fs::create_directories(CFDArcoGlobalInit::store_dir);
+
+        for(auto var : vars_to_store) {
+            auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
+            fs::create_directories(store_var_dir);
+        }
+
+        store_mesh(mesh, CFDArcoGlobalInit::store_dir);
+    }
+}
+
+void finalize_history_stepping(const fs::path& store_path) {
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        auto store_dir_latest = store_path / "run_latest";
+        fs::remove_all(store_dir_latest);
+        const auto copy_options = fs::copy_options::update_existing | fs::copy_options::recursive;
+        fs::copy(CFDArcoGlobalInit::store_dir, store_dir_latest, copy_options);
+    }
+}
+
+
+void store_history_stepping(const std::vector<Variable*>& vars_to_store, const Mesh2D* mesh, int i) {
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        fs::create_directories(CFDArcoGlobalInit::store_dir);
+    }
+    for (auto var: vars_to_store) {
+
+        auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
+        fs::create_directories(store_var_dir);
+
+        auto grid_hist = to_grid(mesh, var->current);
+
+        if (CFDArcoGlobalInit::get_rank() == 0) {
+            std::fstream file;
+            file.open(store_var_dir / (std::to_string(i) + ".bin"), std::ios_base::out | std::ios_base::binary);
+
+            if (!file.is_open()) {
+                std::cerr << "Unable to open the file" << std::endl;
+                return;
+            }
+
+
+            file.write(reinterpret_cast<char *>(grid_hist.data()),
+                       grid_hist.rows() * grid_hist.cols() * sizeof(double));
+            file.close();
+        }
     }
 }
 

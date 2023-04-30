@@ -6,9 +6,13 @@
 #include <numeric>
 #include <algorithm>
 #include <random>
+#include <filesystem>
 #include "cfdarcho_main.hpp"
 #include "distribution_algo.hpp"
 #include "cuda_operators.hpp"
+
+namespace fs = std::filesystem;
+
 
 std::vector<std::vector<size_t>> CFDArcoGlobalInit::node_distribution = {};
 std::vector<size_t> CFDArcoGlobalInit::current_proc_node_distribution = {};
@@ -18,7 +22,10 @@ std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_receive_di
 Mesh2D* CFDArcoGlobalInit::mesh = nullptr;
 int CFDArcoGlobalInit::world_size = 0;
 int CFDArcoGlobalInit::world_rank = 0;
+bool CFDArcoGlobalInit::skip_history = false;
 bool CFDArcoGlobalInit::cuda_enabled = false;
+bool CFDArcoGlobalInit::store_stepping = false;
+fs::path CFDArcoGlobalInit::store_dir = {};
 
 void CFDArcoGlobalInit::finalize() {
     MPI_Finalize();
@@ -219,17 +226,27 @@ rmm::mr::cuda_memory_resource* get_cuda_resource() {
 }
 #endif
 
-void CFDArcoGlobalInit::initialize(int argc, char **argv) {
+void CFDArcoGlobalInit::initialize(int argc, char **argv, bool skip_history_, const fs::path& store_path) {
     world_size = 0;
     world_rank = 0;
+    skip_history = skip_history_;
     mesh = nullptr;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+    std::time_t t = std::time(0);
+    std::tm *now = std::localtime(&t);
+    std::string timestamp = std::to_string(now->tm_year + 1900) + "_" + std::to_string(now->tm_mon + 1) + "_" +
+                            std::to_string(now->tm_mday) + "_" + std::to_string(now->tm_hour) + "_" +
+                            std::to_string(now->tm_min) +
+                            "_" + std::to_string(now->tm_sec);
+
+    store_dir = store_path / ("run_" + timestamp);
 }
 
-void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh) {
+void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh, int cuda_ranks) {
 
 #ifndef CFDARCHO_CUDA_ENABLE
     throw std::runtime_error{"CUDA not available"};
@@ -239,9 +256,9 @@ void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh) {
     auto const [free, total] = rmm::detail::available_device_memory();
     Allocator::cuda_mem_pool = std::make_unique<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>>(
                 get_cuda_resource(),
-                rmm::detail::align_up(static_cast<std::size_t>(static_cast<double>(free) * 0.8),
+                rmm::detail::align_up(static_cast<std::size_t>(static_cast<double>(free) * (.95 / cuda_ranks)),
                                       rmm::detail::CUDA_ALLOCATION_ALIGNMENT),
-                rmm::detail::align_up(static_cast<std::size_t>(static_cast<double>(free) * 0.9),
+                rmm::detail::align_up(static_cast<std::size_t>(static_cast<double>(free) * (1.0 / cuda_ranks)),
                           rmm::detail::CUDA_ALLOCATION_ALIGNMENT)
             );
     Allocator::allocator_alive = true;

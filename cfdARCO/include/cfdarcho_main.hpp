@@ -3,23 +3,28 @@
 
 #include <vector>
 #include <mesh2d.hpp>
+#include <filesystem>
 
 #include "decls.hpp"
 
+namespace fs = std::filesystem;
 
 enum class DistributionStrategy {Linear, Cluster};
 
 class CFDArcoGlobalInit {
 public:
-    static void initialize(int argc, char** argv);
+    static void initialize(int argc, char** argv, bool skip_history_, const fs::path& store_path = "./dumps");
     static void finalize();
     static void make_node_distribution(Mesh2D* _mesh, DistributionStrategy distribution_strategy,
                                        std::vector<size_t> priorities = {});
     static std::vector<MatrixX4dRB> get_redistributed(const MatrixX4dRB& inst, const std::string& name);
     static MatrixX4dRB recombine(const MatrixX4dRB& inst, const std::string& name);
     static inline int get_rank() { return world_rank; }
-    static void enable_cuda(Mesh2D* mesh);
+    static void enable_cuda(Mesh2D* mesh, int cuda_ranks);
     static bool cuda_enabled;
+    static bool skip_history;
+    static bool store_stepping;
+    static fs::path store_dir;
 
     CFDArcoGlobalInit(CFDArcoGlobalInit &other) = delete;
     void operator=(const CFDArcoGlobalInit &) = delete;

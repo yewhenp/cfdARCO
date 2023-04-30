@@ -269,7 +269,7 @@ public:
 class Equation {
 public:
     Equation(size_t timesteps_);
-    void evaluate(std::vector<Variable*>&all_vars, std::vector<std::tuple<Variable*, char, Variable>>&equation_system, DT* dt, bool visualize);
+    void evaluate(std::vector<Variable*>&all_vars, std::vector<std::tuple<Variable*, char, Variable>>&equation_system, DT* dt, bool visualize, std::vector<Variable*> store_vars = {});
 
     size_t timesteps;
 };
