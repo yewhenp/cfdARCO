@@ -15,7 +15,12 @@ find_package (indicators REQUIRED)
 find_package(Matplot++ REQUIRED)
 find_package(MPI REQUIRED)
 
-FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz)
+
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+FetchContent_Declare(json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.2
+        )
 FetchContent_MakeAvailable(json)
 FetchContent_Declare(argparse
         GIT_REPOSITORY https://github.com/p-ranav/argparse.git
@@ -87,6 +92,7 @@ target_link_libraries (cfdARCO_inference OpenMP::OpenMP_CXX)
 target_link_libraries (cfdARCO_inference indicators::indicators)
 target_link_libraries (cfdARCO_inference Matplot++::matplot)
 target_link_libraries(cfdARCO_inference MPI::MPI_CXX)
+target_link_libraries(cfdARCO_inference nlohmann_json::nlohmann_json)
 target_link_libraries(cfdARCO_inference argparse)
 
 if(CMAKE_CUDA_COMPILER)
