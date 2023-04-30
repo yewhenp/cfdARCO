@@ -101,15 +101,15 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh, DistributionStrate
     }
 
 
-    mesh->_volumes = mesh->_volumes_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_normal_x = mesh->_normal_x_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_normal_y = mesh->_normal_y_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_vec_in_edge_direction_x = mesh->_vec_in_edge_direction_x_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_vec_in_edge_direction_y = mesh->_vec_in_edge_direction_y_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_vec_in_edge_neigh_direction_x = mesh->_vec_in_edge_neigh_direction_x_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_vec_in_edge_neigh_direction_y = mesh->_vec_in_edge_neigh_direction_y_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_node_is_boundary = mesh->_node_is_boundary_tot(current_proc_node_distribution, Eigen::all);
-    mesh->_node_is_boundary_reverce = mesh->_node_is_boundary_reverce_tot(current_proc_node_distribution, Eigen::all);
+    mesh->_volumes = mesh->_volumes_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_normal_x = mesh->_normal_x_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_normal_y = mesh->_normal_y_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_vec_in_edge_direction_x = mesh->_vec_in_edge_direction_x_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_vec_in_edge_direction_y = mesh->_vec_in_edge_direction_y_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_vec_in_edge_neigh_direction_x = mesh->_vec_in_edge_neigh_direction_x_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_vec_in_edge_neigh_direction_y = mesh->_vec_in_edge_neigh_direction_y_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_node_is_boundary = mesh->_node_is_boundary_tot(current_proc_node_distribution, Eigen::placeholders::all);
+    mesh->_node_is_boundary_reverce = mesh->_node_is_boundary_reverce_tot(current_proc_node_distribution, Eigen::placeholders::all);
     mesh->_n2_ids = Eigen::MatrixX4d {current_proc_node_distribution.size(), 4};
     for (int i = 0; i < 4; ++i) {
         int qq = 0;
@@ -128,7 +128,7 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh, DistributionStrate
 
 std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB& inst, const std::string& name) {
     MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
-    buff(current_proc_node_distribution, Eigen::all) = inst;
+    buff(current_proc_node_distribution, Eigen::placeholders::all) = inst;
 
     std::vector<MatrixX4dRB> input_buffers;
     std::vector<MatrixX4dRB> output_buffers;
@@ -136,7 +136,7 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
     std::vector<MPI_Status> mpi_statuses;
     for (int i = 0; i < world_size; ++i) {
         input_buffers.emplace_back(current_proc_node_receive_distribution[i].size(), inst.cols());
-        output_buffers.emplace_back(buff(current_proc_node_send_distribution[i], Eigen::all));
+        output_buffers.emplace_back(buff(current_proc_node_send_distribution[i], Eigen::placeholders::all));
     }
 
     for (int i = 0; i < world_size; ++i) {
@@ -166,13 +166,13 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
         if (i == world_rank)
             continue;
         if (!current_proc_node_receive_distribution[i].empty()) {
-            buff(current_proc_node_receive_distribution[i], Eigen::all) = input_buffers[i];
+            buff(current_proc_node_receive_distribution[i], Eigen::placeholders::all) = input_buffers[i];
         }
     }
 
     std::vector<MatrixX4dRB> ret = {};
     for (int idx = 0; idx < mesh->_n2_ids.cols(); ++idx) {
-        ret.emplace_back(buff(mesh->_n2_ids.col(idx), Eigen::all));
+        ret.emplace_back(buff(mesh->_n2_ids.col(idx), Eigen::placeholders::all));
     }
 
     return ret;
@@ -182,7 +182,7 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
 MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::string& name) {
     MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
     buff.setConstant(0);
-    buff(current_proc_node_distribution, Eigen::all) = inst;
+    buff(current_proc_node_distribution, Eigen::placeholders::all) = inst;
 
     std::vector<MatrixX4dRB> input_buffers;
     std::vector<MPI_Request> mpi_requests;
@@ -206,7 +206,7 @@ MatrixX4dRB CFDArcoGlobalInit::recombine(const MatrixX4dRB& inst, const std::str
     for (int i = 0; i < world_size; ++i) {
         if (i == world_rank)
             continue;
-        buff(node_distribution[i], Eigen::all) = input_buffers[i];
+        buff(node_distribution[i], Eigen::placeholders::all) = input_buffers[i];
     }
 
     return buff;
