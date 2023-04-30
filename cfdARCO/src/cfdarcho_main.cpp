@@ -52,20 +52,27 @@ std::vector<std::vector<size_t>> CFDArcoGlobalInit::get_send_perspective(std::ve
     return ret;
 }
 
-void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh, std::vector<size_t> priorities) {
+void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh, DistributionStrategy distribution_strategy, std::vector<size_t> priorities) {
     mesh = _mesh;
 
-    if (priorities.size() != world_size) {
-        priorities = std::vector<size_t>(world_size, 1);
-        std::cout << "Using default priorities" << std::endl;
+    node_id_to_proc = std::vector<int>(mesh->_num_nodes);
+    if (world_rank == 0) {
+        if (priorities.size() != world_size) {
+            priorities = std::vector<size_t>(world_size, 1);
+            std::cout << "Using default priorities" << std::endl;
+        }
+        std::cout << "priorities: ";
+        for (auto pr : priorities) {
+            std::cout << pr << " ";
+        }
+        std::cout << std::endl;
+
+        if (distribution_strategy == DistributionStrategy::Cluster)
+            node_id_to_proc = cluster_distribution(mesh, world_size, priorities);
+        if (distribution_strategy == DistributionStrategy::Linear)
+            node_id_to_proc = linear_distribution(mesh, world_size, priorities);
     }
-//    if (world_rank == 0) {
-//        node_id_to_proc = cluster_distribution(mesh, world_size, priorities);
-//    } else {
-//        node_id_to_proc = std::vector<int>(mesh->_num_nodes);
-//    }
-//    MPI_Bcast(node_id_to_proc.data(), mesh->_num_nodes, MPI_INT, 0, MPI_COMM_WORLD);
-    node_id_to_proc = linear_distribution(mesh, world_size, priorities);
+    MPI_Bcast(node_id_to_proc.data(), mesh->_num_nodes, MPI_INT, 0, MPI_COMM_WORLD);
 
     node_distribution = std::vector<std::vector<size_t>>(world_size);
     for (int i = 0; i < mesh->_num_nodes; ++i) {

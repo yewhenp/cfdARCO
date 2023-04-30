@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.22)
 project(cfdARCO LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -17,6 +17,11 @@ find_package(MPI REQUIRED)
 
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz)
 FetchContent_MakeAvailable(json)
+FetchContent_Declare(argparse
+        GIT_REPOSITORY https://github.com/p-ranav/argparse.git
+        GIT_TAG v2.9
+        )
+FetchContent_MakeAvailable(argparse)
 
 
 set(CFDARCHO_BASE_SOURCES
@@ -70,6 +75,7 @@ target_link_libraries (cfdARCO indicators::indicators)
 target_link_libraries (cfdARCO Matplot++::matplot)
 target_link_libraries(cfdARCO MPI::MPI_CXX)
 target_link_libraries(cfdARCO nlohmann_json::nlohmann_json)
+target_link_libraries(cfdARCO argparse)
 
 
 add_executable(cfdARCO_inference ${CFDARCHO_INFERENCE_SOURCES})
@@ -81,7 +87,7 @@ target_link_libraries (cfdARCO_inference OpenMP::OpenMP_CXX)
 target_link_libraries (cfdARCO_inference indicators::indicators)
 target_link_libraries (cfdARCO_inference Matplot++::matplot)
 target_link_libraries(cfdARCO_inference MPI::MPI_CXX)
-target_link_libraries(cfdARCO_inference nlohmann_json::nlohmann_json)
+target_link_libraries(cfdARCO_inference argparse)
 
 if(CMAKE_CUDA_COMPILER)
     FetchContent_Declare(rmm

@@ -5,6 +5,7 @@
 #include <matplot/matplot.h>
 #include <chrono>
 #include <thread>
+#include <argparse/argparse.hpp>
 
 #include "mesh2d.hpp"
 #include "fvm.hpp"
@@ -51,12 +52,45 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
 }
 
 int main(int argc, char **argv) {
+    argparse::ArgumentParser program("cfdARCO");
+    program.add_argument("-v", "--visualize").default_value(false).implicit_value(true);
+    program.add_argument("--create_plot").default_value(false).implicit_value(true);
+    program.add_argument("-L")
+            .help("square size")
+            .default_value(200)
+            .scan<'i', int>();
+    program.add_argument("-t", "--timesteps")
+            .help("timesteps")
+            .default_value(1000)
+            .scan<'i', int>();
+    program.add_argument("-c", "--cuda_enable").default_value(false).implicit_value(true);
+    program.add_argument("--cuda_ranks")
+            .default_value(2)
+            .scan<'i', int>();
+    program.add_argument("-s", "--store").default_value(false).implicit_value(true);
+    program.add_argument("-d", "--dist")
+            .default_value(std::string("cl"));
+    program.add_argument("-p", "--priorities")
+            .nargs(argparse::nargs_pattern::any)
+            .default_value(std::vector<size_t>{})
+            .scan<'i', size_t>();
+
+    try {
+        program.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        std::exit(1);
+    }
+
     CFDArcoGlobalInit::initialize(argc, argv);
 
-    bool visualize = 1, create_plot = 0;
+    bool visualize = program.get<bool>("visualize");
+    bool create_plot = program.get<bool>("create_plot");
 
-    size_t L = 300;
-    size_t timesteps = 1000;
+    size_t L = program.get<int>("L");
+    size_t timesteps = program.get<int>("timesteps");
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
@@ -64,11 +98,23 @@ int main(int argc, char **argv) {
     mesh.init_basic_internals();
     mesh.compute();
 
-    CFDArcoGlobalInit::make_node_distribution(&mesh, {});
+    DistributionStrategy dist;
+    auto dist_str = program.get<std::string>("dist");
+    if (dist_str == "cl") {
+        dist = DistributionStrategy::Cluster;
+    } else if (dist_str == "ln") {
+        dist = DistributionStrategy::Linear;
+    } else {
+        std::cerr << "unknown dist strategy: " << dist_str << std::endl;
+        std::exit(1);
+    }
 
-//    if (CFDArcoGlobalInit::get_rank() < 2 ) {
-//        CFDArcoGlobalInit::enable_cuda(&mesh);
-//    }
+    auto priorities = program.get<std::vector<size_t>>("priorities");
+    CFDArcoGlobalInit::make_node_distribution(&mesh, dist, priorities);
+
+    if (program.get<bool>("cuda_enable") && CFDArcoGlobalInit::get_rank() < program.get<int>("cuda_ranks") ) {
+        CFDArcoGlobalInit::enable_cuda(&mesh);
+    }
 
     auto rho_initial = initial_val(&mesh, 1, 2);
     auto rho = Variable(&mesh,
@@ -150,7 +196,9 @@ int main(int argc, char **argv) {
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
-    store_history({&rho}, &mesh);
+    if (program.get<bool>("store")) {
+        store_history({&rho}, &mesh);
+    }
 
     if (visualize && create_plot) {
         auto fig = matplot::figure(true);
