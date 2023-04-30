@@ -1,4 +1,7 @@
 .vscode/
 build/
+bin/
+lib/
 dumps/
+report.csv
 vgcore.*
