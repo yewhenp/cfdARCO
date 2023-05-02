@@ -60,5 +60,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     mesh_sizes = range(args.mesh_size_from, args.mesh_size_to, args.mesh_size_step)
-    generate_report(args.num_proc, list(mesh_sizes), args.procs_per_node, args.nodes, args.out_file)
+    generate_report(args.num_proc, list(mesh_sizes), args.nodes, args.procs_per_node, args.out_file)
 
