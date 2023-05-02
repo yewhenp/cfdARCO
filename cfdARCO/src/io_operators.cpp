@@ -234,3 +234,52 @@ std::pair<std::shared_ptr<Mesh2D>, std::vector<Variable>> read_history(const fs:
 
     return {mesh, vars};
 }
+
+
+std::pair<std::vector<Variable>, int> init_read_history_stepping(Mesh2D* mesh, const fs::path& store_path) {
+    std::vector<Variable> vars;
+    int num_entries;
+
+    for (const auto & entry : fs::directory_iterator(store_path)) {
+        if (entry.is_directory()) {
+            Eigen::VectorXd initial = Eigen::VectorXd::Zero(mesh->_num_nodes);
+            auto var_name = entry.path().filename().string();
+            BoundaryFN bound = [] (Mesh2D* mesh, Eigen::VectorXd& arr) { throw std::runtime_error{"Using uninitialized Variable"}; return Eigen::VectorXd{}; };
+            auto var = Variable(mesh,
+                                initial,
+                                bound,
+                                var_name);
+
+            num_entries = std::distance(fs::directory_iterator(entry), fs::directory_iterator{});
+            vars.push_back(var);
+        }
+    }
+
+    return {vars, num_entries};
+}
+
+void read_history_stepping(Mesh2D* mesh, std::vector<Variable*> vars, int q, const fs::path& store_path) {
+    int i = 0;
+    for (const auto & entry : fs::directory_iterator(store_path)) {
+        if (entry.is_directory()) {
+
+            std::ifstream file( entry.path() / (std::to_string(q) + ".bin"), std::ios::binary );
+            if(!file.is_open())
+            {
+                throw std::runtime_error{"Unable to open the file " + (entry.path() / (std::to_string(q) + ".bin")).string()};
+            }
+
+            MatrixX4dRB grid {mesh->_x, mesh->_y};
+            file.read(reinterpret_cast<char*>(grid.data()), grid.size() * sizeof(double));
+            file.close();
+
+            if(!file.good()) {
+                throw std::runtime_error{"Error occurred at reading time!"};
+            }
+
+            auto hist_var = from_grid(mesh, grid);
+            vars.at(i)->current = hist_var;
+            i++;
+        }
+    }
+}

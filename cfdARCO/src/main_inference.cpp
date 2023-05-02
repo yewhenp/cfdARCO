@@ -14,18 +14,24 @@
 
 int main(int argc, char **argv) {
     CFDArcoGlobalInit::initialize(argc, argv, false);
-    auto [mesh, vars] = read_history();
+    auto mesh = read_mesh();
+    std::cout << "Mesh read" << std::endl;
+    auto [vars, history_count] = init_read_history_stepping(mesh.get());
+    std::cout << "Vars read" << std::endl;
 
     auto& rho = vars.at(0);
 
     auto fig = matplot::figure(true);
-    for (int i = 0; i < rho.history.size() - 1; ++i) {
-        if (i % 10 != 0) continue;
-        auto grid_hist = to_grid_local(mesh.get(), rho.history[i]);
+    for (int i = 0; i < history_count - 1; ++i) {
+        if (i % 50 != 0) continue;
+        std::cout << "Reading step " << i << std::endl;
+        read_history_stepping(mesh.get(), {&rho}, i);
+        std::cout << "Reading step " << i << " done" << std::endl;
+        auto grid_hist = to_grid_local(mesh.get(), rho.current);
         auto vect = from_eigen_matrix<double>(grid_hist);
         fig->current_axes()->image(vect);
         fig->draw();
-        std::this_thread::sleep_for(std::chrono::milliseconds {100});
+        std::this_thread::sleep_for(std::chrono::milliseconds {10});
     }
 
     CFDArcoGlobalInit::finalize();

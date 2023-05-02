@@ -107,6 +107,7 @@ public:
     MatrixX4dRB _vec_in_edge_neigh_direction_x{};
     MatrixX4dRB _vec_in_edge_neigh_direction_y{};
     MatrixX4dRB _n2_ids{};
+    std::vector<Eigen::VectorXd> _n2_ids_v{};
     MatrixX4dRB _node_is_boundary{};
     MatrixX4dRB _node_is_boundary_reverce{};
 

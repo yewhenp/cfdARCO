@@ -125,6 +125,10 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh, DistributionStrate
             qq++;
         }
     }
+    mesh->_n2_ids_v = {};
+    for (int i = 0; i < 4; ++i) {
+        mesh->_n2_ids_v.emplace_back(mesh->_n2_ids.col(i).eval());
+    }
     mesh->_num_nodes = current_proc_node_distribution.size();
     mesh->_nodes_tot = mesh->_nodes;
     mesh->_nodes = {};
@@ -134,7 +138,8 @@ void CFDArcoGlobalInit::make_node_distribution(Mesh2D *_mesh, DistributionStrate
 }
 
 std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB& inst, const std::string& name) {
-    MatrixX4dRB buff {mesh->_num_nodes_tot, inst.cols()};
+    const int colss = inst.cols();
+    MatrixX4dRB buff {mesh->_num_nodes_tot, colss};
     buff(current_proc_node_distribution, Eigen::placeholders::all) = inst;
 
     std::vector<MatrixX4dRB> input_buffers;
@@ -142,7 +147,7 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
     std::vector<MPI_Request> mpi_requests;
     std::vector<MPI_Status> mpi_statuses;
     for (int i = 0; i < world_size; ++i) {
-        input_buffers.emplace_back(current_proc_node_receive_distribution[i].size(), inst.cols());
+        input_buffers.emplace_back(current_proc_node_receive_distribution[i].size(), colss);
         output_buffers.emplace_back(buff(current_proc_node_send_distribution[i], Eigen::placeholders::all));
     }
 
@@ -152,12 +157,12 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
         if (!current_proc_node_receive_distribution[i].empty()) {
             MPI_Request req;
             mpi_requests.push_back(req);
-            MPI_Irecv(input_buffers[i].data(), input_buffers[i].rows() * input_buffers[i].cols(), MPI_DOUBLE, i, i * 100 + world_rank * 1000, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
+            MPI_Irecv(input_buffers[i].data(), input_buffers[i].rows() * colss, MPI_DOUBLE, i, i * 100 + world_rank * 1000, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
         }
         if (!current_proc_node_send_distribution[i].empty()) {
             MPI_Request req;
             mpi_requests.push_back(req);
-            MPI_Isend(output_buffers[i].data(), output_buffers[i].rows() * output_buffers[i].cols(), MPI_DOUBLE, i, i * 1000 + world_rank * 100, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
+            MPI_Isend(output_buffers[i].data(), output_buffers[i].rows() * colss, MPI_DOUBLE, i, i * 1000 + world_rank * 100, MPI_COMM_WORLD, &(mpi_requests.at(mpi_requests.size()-1)));
         }
     }
 
@@ -177,9 +182,13 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
         }
     }
 
-    std::vector<MatrixX4dRB> ret = {};
-    for (int idx = 0; idx < mesh->_n2_ids.cols(); ++idx) {
-        ret.emplace_back(buff(mesh->_n2_ids.col(idx), Eigen::placeholders::all));
+    std::vector<MatrixX4dRB> ret {};
+    ret.reserve(4);
+//    for (int idx = 0; idx < mesh->_n2_ids.cols(); ++idx) {
+    for (int idx = 0; idx < 4; ++idx) {
+        auto& id_s = mesh->_n2_ids_v[idx];
+        auto recomb = buff(id_s, Eigen::placeholders::all);
+        ret.push_back(recomb);
     }
 
     return ret;
@@ -244,6 +253,8 @@ void CFDArcoGlobalInit::initialize(int argc, char **argv, bool skip_history_, co
                             "_" + std::to_string(now->tm_sec);
 
     store_dir = store_path / ("run_" + timestamp);
+
+
 }
 
 void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh, int cuda_ranks) {

@@ -3,6 +3,6 @@ build/
 bin/
 lib/
 dumps/
-report.csv
+reports/report.csv
 reports/
 vgcore.*
