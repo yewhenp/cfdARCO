@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     auto fig = matplot::figure(true);
     for (int i = 0; i < history_count - 1; ++i) {
-        if (i % 50 != 0) continue;
+//        if (i % 50 != 0) continue;
         std::cout << "Reading step " << i << std::endl;
         read_history_stepping(mesh.get(), {&rho}, i);
         std::cout << "Reading step " << i << " done" << std::endl;
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         auto vect = from_eigen_matrix<double>(grid_hist);
         fig->current_axes()->image(vect);
         fig->draw();
-        std::this_thread::sleep_for(std::chrono::milliseconds {10});
+        std::this_thread::sleep_for(std::chrono::milliseconds {50});
     }
 
     CFDArcoGlobalInit::finalize();

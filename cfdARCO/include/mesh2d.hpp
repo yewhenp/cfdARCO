@@ -72,7 +72,9 @@ public:
     Mesh2D(size_t x, size_t y, double lx, double ly) : _num_nodes{x*y}, _num_nodes_tot{x*y}, _x{x}, _y{y},
             _lx{lx}, _ly{ly}, _dx{lx / static_cast<double>(x)}, _dy{ly / static_cast<double>(y)} {};
     void compute() override;
+    void delete_node(int id);
     void init_basic_internals();
+    void make_strange_internals();
     [[nodiscard]] size_t coord_fo_idx(size_t x, size_t y) const;
     std::vector<size_t> get_ids_of_neightbours(size_t node_id);
 

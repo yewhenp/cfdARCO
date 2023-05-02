@@ -17,7 +17,7 @@ Eigen::VectorXd initial_val(Mesh2D* mesh, double val_out, double val_in) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        if (.3 < node->y() && node->y() < .7) {
+        if (node->y() < .1 && node->x() > .48 && node->x() < .52) {
             ret(i) = val_in;
         } else {
             ret(i) = val_out;
@@ -31,7 +31,7 @@ Eigen::VectorXd initial_pertrubations(Mesh2D* mesh, double val_out, double val_i
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        if (.3 < node->x() && node->x() < .7) {
+        if (.4 < node->x() && node->x() < .6) {
             ret(i) = val_in;
         } else {
             ret(i) = val_out;
@@ -49,6 +49,20 @@ Eigen::VectorXd boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorX
     auto arr1 = arr.cwiseProduct(mesh->_node_is_boundary_reverce);
     auto copy_var1 = copy_var.cwiseProduct(mesh->_node_is_boundary);
     return arr1 + copy_var1;
+}
+
+Eigen::VectorXd boundary_copy_only_edge(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
+    auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    int i = 0;
+    for (auto& node : mesh->_nodes) {
+        if (node->is_boundary() && (.1 > node->x() && node->x() > .9) && (.1 > node->y() && node->y() > .9)) {
+            ret(i) = copy_var(i);
+        } else {
+            ret(i) = arr(i);
+        }
+        ++i;
+    }
+    return ret;
 }
 
 int main(int argc, char **argv) {
@@ -76,6 +90,8 @@ int main(int argc, char **argv) {
             .nargs(argparse::nargs_pattern::any)
             .default_value(std::vector<size_t>{})
             .scan<'i', size_t>();
+    program.add_argument("--strange_mesh").default_value(false).implicit_value(true);
+
 
     try {
         program.parse_args(argc, argv);
@@ -98,6 +114,9 @@ int main(int argc, char **argv) {
 
     auto mesh = Mesh2D{L, L, 1, 1};
     mesh.init_basic_internals();
+    if (program.get<bool>("strange_mesh")) {
+        mesh.make_strange_internals();
+    }
     mesh.compute();
 
     DistributionStrategy dist;
@@ -121,51 +140,51 @@ int main(int argc, char **argv) {
     auto rho_initial = initial_val(&mesh, 1, 2);
     auto rho = Variable(&mesh,
                           rho_initial,
-                          [& rho_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, rho_initial); },
+                          [& rho_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_initial); },
                           "rho");
 
-    auto u_initial = initial_val(&mesh, -0.5, 0.5);
+    auto u_initial = initial_val(&mesh, 0, 0);
     auto u = Variable(&mesh,
                           u_initial,
-                          [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, u_initial); },
+                          [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, u_initial); },
                           "u");
 
-    auto v_initial = initial_pertrubations(&mesh, -0.5, -0.3);
+    auto v_initial = initial_val(&mesh, 0.4, 0.4);
     auto v = Variable(&mesh,
                         v_initial,
-                        [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, v_initial); },
+                        [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, v_initial); },
                         "v");
 
     Eigen::VectorXd p_initial = Eigen::VectorXd{mesh._num_nodes};
     p_initial.setConstant(2.5);
     auto p = Variable(&mesh,
                         p_initial,
-                        [& p_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, p_initial); },
+                        [& p_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, p_initial); },
                         "p");
 
     Eigen::VectorXd mass_initial = rho.current.array() * mesh._volumes.array();
     auto mass = Variable(&mesh,
                            mass_initial,
-                           [& mass_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, mass_initial); },
+                           [& mass_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, mass_initial); },
                            "mass");
 
     Eigen::VectorXd rho_u_initial = rho.current.array() * u.current.array() * mesh._volumes.array();
     auto rho_u = Variable(&mesh,
                             rho_u_initial,
-                           [& rho_u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, rho_u_initial); },
+                           [& rho_u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_u_initial); },
                            "rho_u");
 
     Eigen::VectorXd rho_v_initial = rho.current.array() * v.current.array() * mesh._volumes.array();
     auto rho_v = Variable(&mesh,
                             rho_v_initial,
-                            [& rho_v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, rho_v_initial); },
+                            [& rho_v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_v_initial); },
                             "rho_v");
 
     auto E = p / (gamma - 1) + 0.5 * rho * ((u * u) + (v * v));
     Eigen::VectorXd E_initial = (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array() + v.current.array() * v.current.array())) * mesh._volumes.array();
     auto rho_e = Variable(&mesh,
                           E_initial,
-                          [& E_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, E_initial); },
+                          [& E_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, E_initial); },
                           "rho_e");
 
     std::vector<Variable*> space_vars {&u, &v, &p, &rho};

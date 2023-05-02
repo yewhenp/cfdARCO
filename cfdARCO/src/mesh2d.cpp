@@ -340,3 +340,63 @@ std::vector<size_t> Mesh2D::get_ids_of_neightbours(size_t node_id) {
 
     return ret;
 }
+
+void Mesh2D::delete_node(int id) {
+    auto node = _nodes.at(id);
+    _nodes.erase (_nodes.begin() + id);
+
+    for (auto edge_id : node->_edges_id) {
+        auto edge = _edges.at(edge_id);
+        edge->_nodes_id.erase(std::remove(edge->_nodes_id.begin(), edge->_nodes_id.end(), node->_id), edge->_nodes_id.end());
+    }
+    for (const auto& node_iter : _nodes) {
+        if (node_iter->_id >= node->_id) {
+            node_iter->_id = node_iter->_id - 1;
+        }
+
+        std::unordered_map<size_t, Eigen::Matrix<double, 1, 2>> new_vectors_in_edges_directions_by_id{};
+        for (auto& it : node_iter->_vectors_in_edges_directions_by_id) {
+            if (it.first >= node->_id) {
+                new_vectors_in_edges_directions_by_id[it.first - 1] = it.second;
+            } else {
+                new_vectors_in_edges_directions_by_id[it.first] = it.second;
+            }
+        }
+        node_iter->_vectors_in_edges_directions_by_id = new_vectors_in_edges_directions_by_id;
+    }
+    for (const auto& edge_iter : _edges) {
+        std::vector<size_t> new_nodes_id {};
+        for (auto& it : edge_iter->_nodes_id) {
+            if (it >= node->_id) {
+                new_nodes_id.push_back(it - 1);
+            } else {
+                new_nodes_id.push_back(it);
+            }
+        }
+        edge_iter->_nodes_id = new_nodes_id;
+    }
+
+    _num_nodes_tot--;
+    _num_nodes--;
+}
+
+void Mesh2D::make_strange_internals() {
+    int st_x = 0.4 * static_cast<double>(_x);
+    int en_x = 0.6 * static_cast<double>(_x);
+    int st_y = 0.2 * static_cast<double>(_y);
+    int en_y = 0.4 * static_cast<double>(_y);
+
+    std::vector<size_t> to_remove{};
+    for (int x_ = 0; x_ < _x; ++x_) {
+        for (int y_ = 0; y_ < _y; ++y_) {
+            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+                auto i = coord_fo_idx(x_, y_);
+                to_remove.push_back(i);
+            }
+        }
+    }
+    std::sort(to_remove.begin(), to_remove.end(), std::greater<>());
+    for (auto node_id : to_remove) {
+        delete_node(node_id);
+    }
+}

@@ -19,7 +19,7 @@ void store_history(const std::vector<Variable*>& vars_to_store, const Mesh2D* me
         fs::create_directories(store_var_dir);
 
         for (int i = 0; i < var->history.size() - 1; ++i) {
-            auto grid_hist = to_grid(mesh, var->history[i]);
+            auto grid_hist = CFDArcoGlobalInit::recombine(var->history[i], "to_grid");
 
             if (CFDArcoGlobalInit::get_rank() == 0) {
                 std::fstream file;
@@ -82,7 +82,7 @@ void store_history_stepping(const std::vector<Variable*>& vars_to_store, const M
         auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
         fs::create_directories(store_var_dir);
 
-        auto grid_hist = to_grid(mesh, var->current);
+        auto grid_hist = CFDArcoGlobalInit::recombine(var->current, "to_grid");
 
         if (CFDArcoGlobalInit::get_rank() == 0) {
             std::fstream file;
@@ -157,6 +157,8 @@ std::shared_ptr<Mesh2D> read_mesh(const fs::path& store_path) {
     json data = json::parse(f);
 
     auto mesh = std::make_shared<Mesh2D>(data["x"], data["y"], data["lx"], data["ly"]);
+    mesh->_num_nodes = data["nodes"].size();
+    mesh->_num_nodes_tot = data["nodes"].size();
     for (int i = 0; i < data["vertexes"].size(); ++i) {
         auto vrtx = std::make_shared<Vertex2D>(data["vertexes"][i][0], data["vertexes"][i][1], i);
         mesh->_vertexes.push_back(vrtx);
@@ -179,16 +181,6 @@ std::shared_ptr<Mesh2D> read_mesh(const fs::path& store_path) {
     }
 
     mesh->compute();
-
-    auto mesh2 = Mesh2D{data["x"], data["y"], data["lx"], data["ly"]};
-    mesh2.init_basic_internals();
-    mesh2.compute();
-
-    if (!mesh2._vec_in_edge_neigh_direction_x.isApprox(mesh->_vec_in_edge_neigh_direction_x)) std::cerr << "mesh2._vec_in_edge_neigh_direction_x" << std::endl;
-    if (!mesh2._vec_in_edge_neigh_direction_y.isApprox(mesh->_vec_in_edge_neigh_direction_y)) std::cerr << "mesh2._vec_in_edge_neigh_direction_y" << std::endl;
-    if (!mesh2._vec_in_edge_direction_x.isApprox(mesh->_vec_in_edge_direction_x)) std::cerr << "mesh2._vec_in_edge_direction_x" << std::endl;
-    if (!mesh2._vec_in_edge_direction_y.isApprox(mesh->_vec_in_edge_direction_y)) std::cerr << "mesh2._vec_in_edge_direction_y" << std::endl;
-    if (!mesh2._volumes.isApprox(mesh->_volumes)) std::cerr << "mesh2._volumes" << std::endl;
 
     return mesh;
 }
@@ -216,7 +208,7 @@ std::pair<std::shared_ptr<Mesh2D>, std::vector<Variable>> read_history(const fs:
                     throw std::runtime_error{"Unable to open the file"};
                 }
 
-                MatrixX4dRB grid {mesh->_x, mesh->_y};
+                Eigen::VectorXd grid {mesh->_num_nodes};
                 file.read(reinterpret_cast<char*>(grid.data()), grid.size() * sizeof(double));
                 file.close();
 
@@ -224,8 +216,7 @@ std::pair<std::shared_ptr<Mesh2D>, std::vector<Variable>> read_history(const fs:
                     throw std::runtime_error{"Error occurred at reading time!"};
                 }
 
-                auto hist_var = from_grid(mesh.get(), grid);
-                var.history.push_back(hist_var);
+                var.history.push_back(grid);
             }
 
             vars.push_back(var);
@@ -269,7 +260,7 @@ void read_history_stepping(Mesh2D* mesh, std::vector<Variable*> vars, int q, con
                 throw std::runtime_error{"Unable to open the file " + (entry.path() / (std::to_string(q) + ".bin")).string()};
             }
 
-            MatrixX4dRB grid {mesh->_x, mesh->_y};
+            Eigen::VectorXd grid {mesh->_num_nodes};
             file.read(reinterpret_cast<char*>(grid.data()), grid.size() * sizeof(double));
             file.close();
 
@@ -277,8 +268,7 @@ void read_history_stepping(Mesh2D* mesh, std::vector<Variable*> vars, int q, con
                 throw std::runtime_error{"Error occurred at reading time!"};
             }
 
-            auto hist_var = from_grid(mesh, grid);
-            vars.at(i)->current = hist_var;
+            vars.at(i)->current = grid;
             i++;
         }
     }
