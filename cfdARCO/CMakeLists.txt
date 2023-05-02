@@ -43,6 +43,7 @@ set(CFDARCHO_BASE_SOURCES
         include/cuda_operators.hpp
         include/io_operators.hpp
         src/io_operators.cpp
+        include/eigen_holder.hpp
         )
 
 set(CFDARCHO_SOURCES ${CFDARCHO_BASE_SOURCES}
