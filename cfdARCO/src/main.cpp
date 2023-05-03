@@ -17,7 +17,7 @@ Eigen::VectorXd initial_val(Mesh2D* mesh, double val_out, double val_in) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        if (node->y() < .1 && node->x() > .48 && node->x() < .52) {
+        if (.3 < node->y() && node->y() < .7) {
             ret(i) = val_in;
         } else {
             ret(i) = val_out;
@@ -31,7 +31,7 @@ Eigen::VectorXd initial_pertrubations(Mesh2D* mesh, double val_out, double val_i
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        if (.4 < node->x() && node->x() < .6) {
+        if (.3 < node->x() && node->x() < .7) {
             ret(i) = val_in;
         } else {
             ret(i) = val_out;
@@ -91,6 +91,8 @@ int main(int argc, char **argv) {
             .default_value(std::vector<size_t>{})
             .scan<'i', size_t>();
     program.add_argument("--strange_mesh").default_value(false).implicit_value(true);
+    program.add_argument("-m", "--mesh")
+            .default_value(std::string(""));
 
 
     try {
@@ -112,12 +114,16 @@ int main(int argc, char **argv) {
     double CFL = 0.5;
     double gamma = 5. / 3.;
 
-    auto mesh = Mesh2D{L, L, 1, 1};
-    mesh.init_basic_internals();
-    if (program.get<bool>("strange_mesh")) {
-        mesh.make_strange_internals();
+    auto mesh = std::make_shared<Mesh2D>(L, L, 1, 1);
+    if (program.get<std::string>("mesh") != "") {
+        mesh = read_mesh(program.get<std::string>("mesh"));
+    } else {
+        mesh->init_basic_internals();
+        if (program.get<bool>("strange_mesh")) {
+            mesh->make_strange_internals();
+        }
+        mesh->compute();
     }
-    mesh.compute();
 
     DistributionStrategy dist;
     auto dist_str = program.get<std::string>("dist");
@@ -131,70 +137,70 @@ int main(int argc, char **argv) {
     }
 
     auto priorities = program.get<std::vector<size_t>>("priorities");
-    CFDArcoGlobalInit::make_node_distribution(&mesh, dist, priorities);
+    CFDArcoGlobalInit::make_node_distribution(mesh.get(), dist, priorities);
 
     if (program.get<bool>("cuda_enable") && CFDArcoGlobalInit::get_rank() < program.get<int>("cuda_ranks") ) {
-        CFDArcoGlobalInit::enable_cuda(&mesh, program.get<int>("cuda_ranks"));
+        CFDArcoGlobalInit::enable_cuda(mesh.get(), program.get<int>("cuda_ranks"));
     }
 
-    auto rho_initial = initial_val(&mesh, 1, 2);
-    auto rho = Variable(&mesh,
+    auto rho_initial = initial_val(mesh.get(), 1, 2);
+    auto rho = Variable(mesh.get(),
                           rho_initial,
                           [& rho_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_initial); },
                           "rho");
 
-    auto u_initial = initial_val(&mesh, 0, 0);
-    auto u = Variable(&mesh,
+    auto u_initial = initial_val(mesh.get(), -0.5, 0.5);
+    auto u = Variable(mesh.get(),
                           u_initial,
                           [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, u_initial); },
                           "u");
 
-    auto v_initial = initial_val(&mesh, 0.4, 0.4);
-    auto v = Variable(&mesh,
+    auto v_initial = initial_val(mesh.get(), -0.5, -0.3);
+    auto v = Variable(mesh.get(),
                         v_initial,
                         [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, v_initial); },
                         "v");
 
-    Eigen::VectorXd p_initial = Eigen::VectorXd{mesh._num_nodes};
+    Eigen::VectorXd p_initial = Eigen::VectorXd{mesh->_num_nodes};
     p_initial.setConstant(2.5);
-    auto p = Variable(&mesh,
+    auto p = Variable(mesh.get(),
                         p_initial,
                         [& p_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, p_initial); },
                         "p");
 
-    Eigen::VectorXd mass_initial = rho.current.array() * mesh._volumes.array();
-    auto mass = Variable(&mesh,
+    Eigen::VectorXd mass_initial = rho.current.array() * mesh->_volumes.array();
+    auto mass = Variable(mesh.get(),
                            mass_initial,
                            [& mass_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, mass_initial); },
                            "mass");
 
-    Eigen::VectorXd rho_u_initial = rho.current.array() * u.current.array() * mesh._volumes.array();
-    auto rho_u = Variable(&mesh,
+    Eigen::VectorXd rho_u_initial = rho.current.array() * u.current.array() * mesh->_volumes.array();
+    auto rho_u = Variable(mesh.get(),
                             rho_u_initial,
                            [& rho_u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_u_initial); },
                            "rho_u");
 
-    Eigen::VectorXd rho_v_initial = rho.current.array() * v.current.array() * mesh._volumes.array();
-    auto rho_v = Variable(&mesh,
+    Eigen::VectorXd rho_v_initial = rho.current.array() * v.current.array() * mesh->_volumes.array();
+    auto rho_v = Variable(mesh.get(),
                             rho_v_initial,
                             [& rho_v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_v_initial); },
                             "rho_v");
 
     auto E = p / (gamma - 1) + 0.5 * rho * ((u * u) + (v * v));
-    Eigen::VectorXd E_initial = (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array() + v.current.array() * v.current.array())) * mesh._volumes.array();
-    auto rho_e = Variable(&mesh,
+    Eigen::VectorXd E_initial = (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array() + v.current.array() * v.current.array())) * mesh->_volumes.array();
+    auto rho_e = Variable(mesh.get(),
                           E_initial,
                           [& E_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, E_initial); },
                           "rho_e");
 
     std::vector<Variable*> space_vars {&u, &v, &p, &rho};
-    auto dt = DT(&mesh, UpdatePolicies::CourantFriedrichsLewy, CFL, space_vars);
+    auto dt = DT(mesh.get(), UpdatePolicies::CourantFriedrichsLewy, CFL, space_vars);
 
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
-            {&rho,        '=', mass / mesh._volumes},
-            {&u,          '=', rho_u / rho / mesh._volumes},
-            {&v,          '=', rho_v / rho / mesh._volumes},
-            {&p,          '=', (rho_e / mesh._volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
+            {&rho,        '=', mass / mesh->_volumes},
+            {&u,          '=', rho_u / rho / mesh->_volumes},
+            {&v,          '=', rho_v / rho / mesh->_volumes},
+            {&p,          '=', (rho_e / mesh->_volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
 
             {&rho,    '=', rho - 0.5 * dt * (u * rho.dx() + rho * u.dx() + v * rho.dy() + rho * v.dy())},
             {&u,      '=', u - 0.5 * dt * (u * u.dx() + v * u.dy() + (1 / rho) * p.dx())},
@@ -212,7 +218,7 @@ int main(int argc, char **argv) {
 
     std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
 
-    if (program.get<bool>("store_stepping")) init_store_history_stepping({&rho}, &mesh);
+    if (program.get<bool>("store_stepping")) init_store_history_stepping({&rho}, mesh.get());
 
     auto begin = std::chrono::steady_clock::now();
     equation.evaluate(all_vars, equation_system, &dt, visualize, {&rho});
@@ -223,7 +229,7 @@ int main(int argc, char **argv) {
         if (program.get<bool>("store_stepping")) {
             finalize_history_stepping();
         } else {
-            store_history({&rho}, &mesh);
+            store_history({&rho}, mesh.get());
         }
     }
 
@@ -231,7 +237,7 @@ int main(int argc, char **argv) {
         auto fig = matplot::figure(true);
         for (int i = 0; i < rho.history.size() - 1; ++i) {
             if (i % 10 != 0) continue;
-            auto grid_hist = to_grid(&mesh, rho.history[i]);
+            auto grid_hist = to_grid(mesh.get(), rho.history[i]);
             if (CFDArcoGlobalInit::get_rank() == 0) {
                 auto vect = from_eigen_matrix<double>(grid_hist);
                 fig->current_axes()->image(vect);

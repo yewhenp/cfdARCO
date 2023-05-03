@@ -45,14 +45,14 @@ def plot_mesh(mesh_nodes, values):
         i += 1
 
     template = template.replace("{}", "\n".join(all_polys))
-    with open("poly.gnuplot", "w") as filee:
+    with open("mesh.gnuplot", "w") as filee:
         filee.write(template)
 
-    subprocess.run(["gnuplot", "poly.gnuplot"])
+    subprocess.run(["gnuplot", "mesh.gnuplot"])
 
 
 if __name__ == '__main__':
-    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/run_strange_mesh/mesh.json") as filee:
+    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/strange_mesh2.json") as filee:
         mesh_json = json.load(filee)
 
     mesh = []

@@ -3,6 +3,7 @@
 
 
 #include <iostream>
+#include <indicators/progress_bar.hpp>
 #include "mesh2d.hpp"
 
 Eigen::VectorXd Vertex2D::coordinates() const {
@@ -381,8 +382,8 @@ void Mesh2D::delete_node(int id) {
 }
 
 void Mesh2D::make_strange_internals() {
-    int st_x = 0.4 * static_cast<double>(_x);
-    int en_x = 0.6 * static_cast<double>(_x);
+    int st_x = 0.2 * static_cast<double>(_x);
+    int en_x = 0.4 * static_cast<double>(_x);
     int st_y = 0.2 * static_cast<double>(_y);
     int en_y = 0.4 * static_cast<double>(_y);
 
@@ -395,8 +396,73 @@ void Mesh2D::make_strange_internals() {
             }
         }
     }
+
+    st_x = 0.2 * static_cast<double>(_x);
+    en_x = 0.4 * static_cast<double>(_x);
+    st_y = 0.6 * static_cast<double>(_y);
+    en_y = 0.8 * static_cast<double>(_y);
+
+    for (int x_ = 0; x_ < _x; ++x_) {
+        for (int y_ = 0; y_ < _y; ++y_) {
+            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+                auto i = coord_fo_idx(x_, y_);
+                to_remove.push_back(i);
+            }
+        }
+    }
+
+    st_x = 0.6 * static_cast<double>(_x);
+    en_x = 0.8 * static_cast<double>(_x);
+    st_y = 0.6 * static_cast<double>(_y);
+    en_y = 0.8 * static_cast<double>(_y);
+
+    for (int x_ = 0; x_ < _x; ++x_) {
+        for (int y_ = 0; y_ < _y; ++y_) {
+            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+                auto i = coord_fo_idx(x_, y_);
+                to_remove.push_back(i);
+            }
+        }
+    }
+
+    st_x = 0.6 * static_cast<double>(_x);
+    en_x = 0.8 * static_cast<double>(_x);
+    st_y = 0.2 * static_cast<double>(_y);
+    en_y = 0.4 * static_cast<double>(_y);
+
+    for (int x_ = 0; x_ < _x; ++x_) {
+        for (int y_ = 0; y_ < _y; ++y_) {
+            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+                auto i = coord_fo_idx(x_, y_);
+                to_remove.push_back(i);
+            }
+        }
+    }
+
     std::sort(to_remove.begin(), to_remove.end(), std::greater<>());
+
+    indicators::ProgressBar bar{
+            indicators::option::BarWidth{50},
+            indicators::option::Start{"["},
+            indicators::option::Fill{"="},
+            indicators::option::Lead{">"},
+            indicators::option::Remainder{" "},
+            indicators::option::End{"]"},
+            indicators::option::PostfixText{"0.0 %"},
+            indicators::option::ShowElapsedTime{true},
+            indicators::option::ShowRemainingTime{true},
+            indicators::option::ForegroundColor{indicators::Color::blue},
+            indicators::option::FontStyles{std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}
+    };
+
+    int i = 0;
+    int tot_remove = to_remove.size();
     for (auto node_id : to_remove) {
         delete_node(node_id);
+
+        double progress = (static_cast<double>(i) / static_cast<double>(tot_remove)) * 100;
+        bar.set_progress(static_cast<size_t>(progress));
+        bar.set_option(indicators::option::PostfixText{std::to_string(progress) + " %"});
+        i++;
     }
 }

@@ -14,7 +14,7 @@ def plot_mesh(mesh_nodes, values_in_history):
     # set output "cfd.gif"
 
     template = """
-    set terminal gif animate size 400,400
+    set terminal gif animate size 800,800
     set output "cfd.gif"
     
     set palette maxcolors 1024
@@ -42,11 +42,12 @@ def plot_mesh(mesh_nodes, values_in_history):
         r = "{:02x}".format(int(rgb[0] * 255))
         g = "{:02x}".format(int(rgb[1] * 255))
         b = "{:02x}".format(int(rgb[2] * 255))
-        rect_template = f'set object polygon from {x1},{y1} to {x2},{y2} to {x3},{y3} to {x4},{y4} to {x1},{y1} fc rgb "#{r}{g}{b}" fillstyle solid 1.0 border lt -1'
+        # rect_template = f'set object polygon from {x1},{y1} to {x2},{y2} to {x3},{y3} to {x4},{y4} to {x1},{y1} fc rgb "#{r}{g}{b}" fillstyle solid 1.0 border lt -1'
+        rect_template = f'set object polygon from {x1},{y1} to {x2},{y2} to {x3},{y3} to {x4},{y4} to {x1},{y1} fc rgb "#{r}{g}{b}" '
         return rect_template
 
     all_history = []
-    for curr_values in tqdm.tqdm(values_in_history[::20]):
+    for curr_values in tqdm.tqdm(values_in_history[:500:10]):
         all_polys = []
 
         i = 0
