@@ -78,11 +78,15 @@ std::vector<int> cluster_distribution(Mesh2D* mesh, size_t num_proc, std::vector
     std::uniform_int_distribution<> distr(0, num_of_elems);
 
     std::vector<size_t> initial_clusters_ids{};
-    while (initial_clusters_ids.size() < num_proc) {
-        auto curr_id = distr(gen);
-        if (!std::count(initial_clusters_ids.begin(), initial_clusters_ids.end(), curr_id)) {
-            initial_clusters_ids.push_back(curr_id);
-        }
+//    while (initial_clusters_ids.size() < num_proc) {
+//        auto curr_id = distr(gen);
+//        if (!std::count(initial_clusters_ids.begin(), initial_clusters_ids.end(), curr_id)) {
+//            initial_clusters_ids.push_back(curr_id);
+//        }
+//    }
+    int base_step = std::floor(static_cast<double>(num_of_elems) / static_cast<double>(num_proc));
+    for (int i = 0; i < num_proc; ++i) {
+        initial_clusters_ids.push_back(i * base_step);
     }
 
     for (int i = 0; i < num_proc; ++i) {
@@ -183,6 +187,12 @@ std::vector<int> cluster_distribution(Mesh2D* mesh, size_t num_proc, std::vector
         auto cluster_id = point_to_cluster(i);
         node_distribution[i] = cluster_id;
     }
+
+    std::cout << "Node clusters centroids: ";
+    for (int i = 0; i < num_proc; ++i) {
+        std::cout << centroids(i, 0) << ";" << centroids(i, 0) << "  ";
+    }
+
 
 //    show_distribution(mesh, node_distribution);
 
