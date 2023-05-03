@@ -17,20 +17,30 @@ def run_one_run(mesh_path: str, available_nodes, procs_per_node):
         nodes_to_run.append(",".join(one_node_list))
         i += 1
 
-    command_ln = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-m", mesh_path, "-v", "--skip_history", "-d", "ln"]
-    result_ln = subprocess.run(command_ln, capture_output=True, text=True)
-    outs_ln = result_ln.stdout
+    time_ln_microsecondss = []
+    for q in range(5):
+        command_ln = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-t", "1000", "-m", mesh_path, "-v", "--skip_history", "-d", "ln"]
+        result_ln = subprocess.run(command_ln, capture_output=True, text=True)
+        outs_ln = result_ln.stdout
 
-    time_ln_str = outs_ln.split("\n")[-2].split(" ")[-1].split("[")[0]
-    time_ln_microseconds = int(time_ln_str)
+        time_ln_str = outs_ln.split("\n")[-2].split(" ")[-1].split("[")[0]
+        time_ln_microseconds = int(time_ln_str)
+        time_ln_microsecondss.append(time_ln_microseconds)
+        print(f"iter {q} time_ln_microseconds = {time_ln_microseconds}")
 
-    command_cl = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-m", mesh_path, "-v", "--skip_history", "-d", "cl"]
-    result_cl = subprocess.run(command_cl, capture_output=True, text=True)
-    outs_cl = result_cl.stdout
+    time_cl_microsecondss = []
+    for q in range(5):
+        command_cl = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-t", "1000", "-m", mesh_path, "-v", "--skip_history", "-d", "cl"]
+        result_cl = subprocess.run(command_cl, capture_output=True, text=True)
+        outs_cl = result_cl.stdout
 
-    time_cl_str = outs_cl.split("\n")[-2].split(" ")[-1].split("[")[0]
-    time_cl_microseconds = int(time_cl_str)
+        time_cl_str = outs_cl.split("\n")[-2].split(" ")[-1].split("[")[0]
+        time_cl_microseconds = int(time_cl_str)
+        time_cl_microsecondss.append(time_cl_microseconds)
+        print(f"iter {q} time_cl_microseconds = {time_cl_microseconds}")
 
+    time_ln_microseconds = min(time_ln_microsecondss)
+    time_cl_microseconds = min(time_cl_microsecondss)
     print(f"Res(mesh={mesh_path}) = ln:{time_ln_microseconds}  cl:{time_cl_microseconds}")
 
     return time_ln_microseconds, time_cl_microseconds
