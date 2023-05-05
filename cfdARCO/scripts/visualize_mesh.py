@@ -52,7 +52,7 @@ def plot_mesh(mesh_nodes, values):
 
 
 if __name__ == '__main__':
-    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/strange_mesh2.json") as filee:
+    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/strange_mesh3.json") as filee:
         mesh_json = json.load(filee)
 
     mesh = []

@@ -65,6 +65,25 @@ Eigen::VectorXd boundary_copy_only_edge(Mesh2D* mesh, Eigen::VectorXd& arr, Eige
     return ret;
 }
 
+Eigen::VectorXd boundary_with_neumann_pressure(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
+    auto redist = CFDArcoGlobalInit::get_redistributed(arr, "boundary_with_neumann");
+    auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    int i = 0;
+    for (auto& node : mesh->_nodes) {
+        if (node->is_boundary()) {
+            if (.1 > node->y()) {
+                ret(i) = 1;
+            } else {
+//                auto where_bound
+            }
+        } else {
+            ret(i) = arr(i);
+        }
+        ++i;
+    }
+    return ret;
+}
+
 int main(int argc, char **argv) {
     argparse::ArgumentParser program("cfdARCO");
     program.add_argument("-v", "--visualize").default_value(false).implicit_value(true);
@@ -146,51 +165,51 @@ int main(int argc, char **argv) {
     auto rho_initial = initial_val(mesh.get(), 1, 2);
     auto rho = Variable(mesh.get(),
                           rho_initial,
-                          [& rho_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_initial); },
+                          [& rho_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, rho_initial); },
                           "rho");
 
     auto u_initial = initial_val(mesh.get(), -0.5, 0.5);
     auto u = Variable(mesh.get(),
                           u_initial,
-                          [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, u_initial); },
+                          [& u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, u_initial); },
                           "u");
 
-    auto v_initial = initial_val(mesh.get(), -0.5, -0.3);
+    auto v_initial = initial_pertrubations(mesh.get(), -0.5, -0.3);
     auto v = Variable(mesh.get(),
                         v_initial,
-                        [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, v_initial); },
+                        [& v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, v_initial); },
                         "v");
 
     Eigen::VectorXd p_initial = Eigen::VectorXd{mesh->_num_nodes};
     p_initial.setConstant(2.5);
     auto p = Variable(mesh.get(),
                         p_initial,
-                        [& p_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, p_initial); },
+                        [& p_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, p_initial); },
                         "p");
 
     Eigen::VectorXd mass_initial = rho.current.array() * mesh->_volumes.array();
     auto mass = Variable(mesh.get(),
                            mass_initial,
-                           [& mass_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, mass_initial); },
+                           [& mass_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, mass_initial); },
                            "mass");
 
     Eigen::VectorXd rho_u_initial = rho.current.array() * u.current.array() * mesh->_volumes.array();
     auto rho_u = Variable(mesh.get(),
                             rho_u_initial,
-                           [& rho_u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_u_initial); },
+                           [& rho_u_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, rho_u_initial); },
                            "rho_u");
 
     Eigen::VectorXd rho_v_initial = rho.current.array() * v.current.array() * mesh->_volumes.array();
     auto rho_v = Variable(mesh.get(),
                             rho_v_initial,
-                            [& rho_v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, rho_v_initial); },
+                            [& rho_v_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, rho_v_initial); },
                             "rho_v");
 
     auto E = p / (gamma - 1) + 0.5 * rho * ((u * u) + (v * v));
     Eigen::VectorXd E_initial = (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array() + v.current.array() * v.current.array())) * mesh->_volumes.array();
     auto rho_e = Variable(mesh.get(),
                           E_initial,
-                          [& E_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy_only_edge(mesh, arr, E_initial); },
+                          [& E_initial] (Mesh2D* mesh, Eigen::VectorXd& arr) { return boundary_copy(mesh, arr, E_initial); },
                           "rho_e");
 
     std::vector<Variable*> space_vars {&u, &v, &p, &rho};

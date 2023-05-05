@@ -382,62 +382,79 @@ void Mesh2D::delete_node(int id) {
 }
 
 void Mesh2D::make_strange_internals() {
-    int st_x = 0.2 * static_cast<double>(_x);
-    int en_x = 0.4 * static_cast<double>(_x);
-    int st_y = 0.2 * static_cast<double>(_y);
-    int en_y = 0.4 * static_cast<double>(_y);
+//    int st_x = 0.2 * static_cast<double>(_x);
+//    int en_x = 0.4 * static_cast<double>(_x);
+//    int st_y = 0.2 * static_cast<double>(_y);
+//    int en_y = 0.4 * static_cast<double>(_y);
+//
+//    std::vector<size_t> to_remove{};
+//    for (int x_ = 0; x_ < _x; ++x_) {
+//        for (int y_ = 0; y_ < _y; ++y_) {
+//            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+//                auto i = coord_fo_idx(x_, y_);
+//                to_remove.push_back(i);
+//            }
+//        }
+//    }
+//
+//    st_x = 0.2 * static_cast<double>(_x);
+//    en_x = 0.4 * static_cast<double>(_x);
+//    st_y = 0.6 * static_cast<double>(_y);
+//    en_y = 0.8 * static_cast<double>(_y);
+//
+//    for (int x_ = 0; x_ < _x; ++x_) {
+//        for (int y_ = 0; y_ < _y; ++y_) {
+//            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+//                auto i = coord_fo_idx(x_, y_);
+//                to_remove.push_back(i);
+//            }
+//        }
+//    }
+//
+//    st_x = 0.6 * static_cast<double>(_x);
+//    en_x = 0.8 * static_cast<double>(_x);
+//    st_y = 0.6 * static_cast<double>(_y);
+//    en_y = 0.8 * static_cast<double>(_y);
+//
+//    for (int x_ = 0; x_ < _x; ++x_) {
+//        for (int y_ = 0; y_ < _y; ++y_) {
+//            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+//                auto i = coord_fo_idx(x_, y_);
+//                to_remove.push_back(i);
+//            }
+//        }
+//    }
+//
+//    st_x = 0.6 * static_cast<double>(_x);
+//    en_x = 0.8 * static_cast<double>(_x);
+//    st_y = 0.2 * static_cast<double>(_y);
+//    en_y = 0.4 * static_cast<double>(_y);
+//
+//    for (int x_ = 0; x_ < _x; ++x_) {
+//        for (int y_ = 0; y_ < _y; ++y_) {
+//            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
+//                auto i = coord_fo_idx(x_, y_);
+//                to_remove.push_back(i);
+//            }
+//        }
+//    }
 
+
+//  make circle
     std::vector<size_t> to_remove{};
     for (int x_ = 0; x_ < _x; ++x_) {
         for (int y_ = 0; y_ < _y; ++y_) {
-            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
-                auto i = coord_fo_idx(x_, y_);
+            auto i = coord_fo_idx(x_, y_);
+            auto x_rl = static_cast<double>(x_) / static_cast<double>(_x);
+            auto y_rl = static_cast<double>(y_) / static_cast<double>(_y);
+
+            auto origin_dist = x_rl * x_rl + y_rl * y_rl;
+            if (origin_dist <= 0.6) {
                 to_remove.push_back(i);
             }
         }
     }
 
-    st_x = 0.2 * static_cast<double>(_x);
-    en_x = 0.4 * static_cast<double>(_x);
-    st_y = 0.6 * static_cast<double>(_y);
-    en_y = 0.8 * static_cast<double>(_y);
-
-    for (int x_ = 0; x_ < _x; ++x_) {
-        for (int y_ = 0; y_ < _y; ++y_) {
-            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
-                auto i = coord_fo_idx(x_, y_);
-                to_remove.push_back(i);
-            }
-        }
-    }
-
-    st_x = 0.6 * static_cast<double>(_x);
-    en_x = 0.8 * static_cast<double>(_x);
-    st_y = 0.6 * static_cast<double>(_y);
-    en_y = 0.8 * static_cast<double>(_y);
-
-    for (int x_ = 0; x_ < _x; ++x_) {
-        for (int y_ = 0; y_ < _y; ++y_) {
-            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
-                auto i = coord_fo_idx(x_, y_);
-                to_remove.push_back(i);
-            }
-        }
-    }
-
-    st_x = 0.6 * static_cast<double>(_x);
-    en_x = 0.8 * static_cast<double>(_x);
-    st_y = 0.2 * static_cast<double>(_y);
-    en_y = 0.4 * static_cast<double>(_y);
-
-    for (int x_ = 0; x_ < _x; ++x_) {
-        for (int y_ = 0; y_ < _y; ++y_) {
-            if (x_ > st_x && x_ < en_x && y_ > st_y && y_ < en_y) {
-                auto i = coord_fo_idx(x_, y_);
-                to_remove.push_back(i);
-            }
-        }
-    }
 
     std::sort(to_remove.begin(), to_remove.end(), std::greater<>());
 

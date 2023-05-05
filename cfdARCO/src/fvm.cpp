@@ -831,6 +831,8 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
 
         if (CFDArcoGlobalInit::store_stepping) store_history_stepping(store_vars, store_vars.at(0)->mesh, t);
     }
+
+    std::cout << "Time progress = " << t_val << std::endl;
 }
 
 MatrixX4dRB to_grid(const Mesh2D* mesh, Eigen::VectorXd& values_half) {

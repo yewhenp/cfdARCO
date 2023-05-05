@@ -19,13 +19,18 @@ def run_one_run(num_proc: int, mesh_size: int, available_nodes, procs_per_node):
         if i >= len(available_nodes):
             i = 0
 
-    command = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-L", str(mesh_size), "-v", "--skip_history", "-d", "ln"]
-    result = subprocess.run(command, capture_output=True, text=True)
-    outs = result.stdout
+    time_microsecondss = []
+    for q in range(3):
+        command = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-L", str(mesh_size), "-v", "--skip_history", "-d", "ln"]
+        result = subprocess.run(command, capture_output=True, text=True)
+        outs = result.stdout
 
-    time_str = outs.split("\n")[-2].split(" ")[-1].split("[")[0]
-    time_microseconds = int(time_str)
+        time_str = outs.split("\n")[-2].split(" ")[-1].split("[")[0]
+        time_microseconds = int(time_str)
+        time_microsecondss.append(time_microseconds)
+        print(f"Iter {q} time = {time_microseconds}")
 
+    time_microseconds = min(time_microsecondss)
     print(f"Res(num_proc={num_proc}, mesh_size={mesh_size}) = {time_microseconds}")
 
     return time_microseconds
