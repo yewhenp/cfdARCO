@@ -594,12 +594,10 @@ DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd> 
 void DT::update() {
     std::vector<Eigen::VectorXd> redist{};
     for (auto var : space_vars) {
-        redist.emplace_back(CFDArcoGlobalInit::recombine(var->current, "DT::update"));
+        redist.push_back(var->current);
     }
-    if (CFDArcoGlobalInit::get_rank() == 0) {
-        _dt = update_fn(CFL, redist, mesh);
-    }
-    MPI_Bcast(&_dt, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    auto dt_c = update_fn(CFL, redist, mesh);
+    MPI_Allreduce(&dt_c, &_dt, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 }
 
 MatrixX4dRB DT::evaluate() {
