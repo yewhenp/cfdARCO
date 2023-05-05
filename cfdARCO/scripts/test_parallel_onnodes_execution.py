@@ -36,11 +36,11 @@ def run_one_run(num_proc: int, mesh_size: int, available_nodes, procs_per_node):
     return time_microseconds
 
 
-def generate_report(max_num_proc: int, mesh_sizes, available_nodes, procs_per_node, output_file):
+def generate_report(num_proc_from: int, num_proc_to: int, mesh_sizes, available_nodes, procs_per_node, output_file):
     num_proc = []
     times_microseconds = []
     mesh_sizes_df = []
-    for i in range(1, max_num_proc+1):
+    for i in range(num_proc_from, num_proc_to+1):
         for mesh_size in mesh_sizes:
             time_cur = run_one_run(i, mesh_size, available_nodes, procs_per_node)
             num_proc.append(i)
@@ -54,7 +54,8 @@ def generate_report(max_num_proc: int, mesh_sizes, available_nodes, procs_per_no
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='cfdARCHO bench')
-    parser.add_argument('-p', '--num_proc', required=True, type=int)
+    parser.add_argument('-pf', '--num_proc_from', required=True, type=int)
+    parser.add_argument('-pt', '--num_proc_to', required=True, type=int)
     parser.add_argument('-mf', '--mesh_size_from', required=True, type=int)
     parser.add_argument('-mt', '--mesh_size_to', required=True, type=int)
     parser.add_argument('-ms', '--mesh_size_step', required=True, type=int)
@@ -65,5 +66,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     mesh_sizes = range(args.mesh_size_from, args.mesh_size_to, args.mesh_size_step)
-    generate_report(args.num_proc, list(mesh_sizes), args.nodes, args.procs_per_node, args.out_file)
+    generate_report(args.num_proc_from, args.num_proc_to, list(mesh_sizes), args.nodes, args.procs_per_node, args.out_file)
 
