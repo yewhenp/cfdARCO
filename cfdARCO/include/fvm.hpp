@@ -7,6 +7,7 @@
 #include <optional>
 #include <tuple>
 #include <memory>
+#include <mpi.h>
 
 class Variable;
 //class _SubVariable;
@@ -110,19 +111,19 @@ public:
 
 class UpdatePolicies {
 public:
-    static double CourantFriedrichsLewy(double CFL, std::vector<Variable*>& space_vars, Mesh2D* mesh);
+    static double CourantFriedrichsLewy(double CFL, std::vector<Eigen::VectorXd>& space_vars, Mesh2D* mesh);
 };
 
 
 class DT : public Variable {
 public:
-    DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable*>&, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
+    DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd>&, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
     void update();
     MatrixX4dRB evaluate() override;
     CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
-    std::function<double(double, std::vector<Variable*>&, Mesh2D* mesh)> update_fn;
+    std::function<double(double, std::vector<Eigen::VectorXd>&, Mesh2D* mesh)> update_fn;
     std::vector<Variable*>& space_vars;
     double _dt = 0.0;
     double CFL = 0.0;

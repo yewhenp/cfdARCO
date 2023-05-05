@@ -571,28 +571,35 @@ CudaDataMatrix _GradEstimated::evaluate_cu() {
 }
 
 // TODO: think about general interface
-double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Variable *> &space_vars, Mesh2D* mesh) {
+double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Eigen::VectorXd> &space_vars, Mesh2D* mesh) {
     auto u = space_vars.at(0);
     auto v = space_vars.at(1);
     auto p = space_vars.at(2);
     auto rho = space_vars.at(3);
     auto gamma = 5. / 3.;
     double dl = std::min(mesh->_dx, mesh->_dy);
-    auto denom = dl * (((gamma * p->current.array()).cwiseQuotient(rho->current.array())).cwiseSqrt() + (u->current.array() * u->current.array() + v->current.array() * v->current.array()).cwiseSqrt()).cwiseInverse();
+    auto denom = dl * (((gamma * p.array()).cwiseQuotient(rho.array())).cwiseSqrt() + (u.array() * u.array() + v.array() * v.array()).cwiseSqrt()).cwiseInverse();
 
     auto dt = CFL * denom.minCoeff();
 
     return dt;
 }
 
-DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Variable *> &, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable *> &space_vars_) : update_fn{update_fn_}, CFL{CFL_}, space_vars{space_vars_} {
+DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd> &, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*> &space_vars_) : update_fn{update_fn_}, CFL{CFL_}, space_vars{space_vars_} {
     name = "dt";
     mesh = mesh_;
     _dt = 0;
 }
 
 void DT::update() {
-    _dt = update_fn(CFL, space_vars, mesh);
+    std::vector<Eigen::VectorXd> redist{};
+    for (auto var : space_vars) {
+        redist.emplace_back(CFDArcoGlobalInit::recombine(var->current, "DT::update"));
+    }
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        _dt = update_fn(CFL, redist, mesh);
+    }
+    MPI_Bcast(&_dt, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 }
 
 MatrixX4dRB DT::evaluate() {
@@ -832,7 +839,7 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
         if (CFDArcoGlobalInit::store_stepping) store_history_stepping(store_vars, store_vars.at(0)->mesh, t);
     }
 
-    std::cout << "Time progress = " << t_val << std::endl;
+    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << "Time progress = " << t_val << std::endl;
 }
 
 MatrixX4dRB to_grid(const Mesh2D* mesh, Eigen::VectorXd& values_half) {
