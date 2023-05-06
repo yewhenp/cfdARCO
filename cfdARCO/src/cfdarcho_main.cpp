@@ -284,6 +284,8 @@ void CFDArcoGlobalInit::enable_cuda(Mesh2D* mesh, int cuda_ranks) {
     mesh->_vec_in_edge_neigh_direction_x_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_neigh_direction_x);
     mesh->_vec_in_edge_neigh_direction_y_cu = CudaDataMatrix::from_eigen(mesh->_vec_in_edge_neigh_direction_y);
     mesh->_n2_ids_cu = CudaDataMatrix::from_eigen(mesh->_n2_ids);
+    mesh->_node_is_boundary_cu = CudaDataMatrix::from_eigen(mesh->_node_is_boundary);
+    mesh->_node_is_boundary_reverce_cu = CudaDataMatrix::from_eigen(mesh->_node_is_boundary_reverce);
 
 #endif
 }

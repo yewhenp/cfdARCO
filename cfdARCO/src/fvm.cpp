@@ -17,6 +17,15 @@ Variable::Variable(Mesh2D* mesh_, Eigen::VectorXd &initial_, BoundaryFN boundary
         current_cu = CudaDataMatrix::from_eigen(current);
 }
 
+Variable::Variable(Mesh2D* mesh_, Eigen::VectorXd &initial_, BoundaryFN boundary_conditions_, BoundaryFNCU boundary_conditions_cu_, std::string name_) :
+        mesh{mesh_}, current{initial_}, boundary_conditions{std::move(boundary_conditions_)}, boundary_conditions_cu{std::move(boundary_conditions_cu_)}, name{std::move(name_)} {
+    num_nodes = mesh->_num_nodes;
+    is_basically_created = true;
+    has_boundary_conditions_cu = true;
+    if (CFDArcoGlobalInit::cuda_enabled)
+        current_cu = CudaDataMatrix::from_eigen(current);
+}
+
 Variable::Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_,
                    std::function<MatrixX4dRB(MatrixX4dRB &, MatrixX4dRB &)> op_, std::string &name_) :
                     op{op_}, name{name_}  {
@@ -86,6 +95,8 @@ Variable::Variable(Variable &copy_var) {
     current = copy_var.current;
     current_cu = copy_var.current_cu;
     boundary_conditions = copy_var.boundary_conditions;
+    boundary_conditions_cu = copy_var.boundary_conditions_cu;
+    has_boundary_conditions_cu = copy_var.has_boundary_conditions_cu;
     history = copy_var.history;
     num_nodes = copy_var.num_nodes;
     is_subvariable = copy_var.is_subvariable;
@@ -108,6 +119,8 @@ Variable::Variable(const Variable &copy_var) {
     current = copy_var.current;
     current_cu = copy_var.current_cu;
     boundary_conditions = copy_var.boundary_conditions;
+    boundary_conditions_cu = copy_var.boundary_conditions_cu;
+    has_boundary_conditions_cu = copy_var.has_boundary_conditions_cu;
     history = copy_var.history;
     num_nodes = copy_var.num_nodes;
     is_subvariable = copy_var.is_subvariable;
@@ -164,11 +177,26 @@ std::shared_ptr<Variable> _Stab::clone() const  {
 
 void Variable::set_bound() {
     current = boundary_conditions(mesh, current);
+    if (CFDArcoGlobalInit::cuda_enabled) {
+        current_cu = CudaDataMatrix::from_eigen(current);
+    }
+}
+
+void Variable::set_bound_cu() {
+    current_cu = boundary_conditions_cu(mesh, current_cu);
+    if (CFDArcoGlobalInit::get_size() > 1) {
+        current = current_cu.to_eigen(num_nodes, 1);
+    }
 }
 
 void Variable::add_history() {
-    if (!CFDArcoGlobalInit::skip_history)
+    if (!CFDArcoGlobalInit::skip_history) {
+        if (CFDArcoGlobalInit::cuda_enabled) {
+            current = current_cu.to_eigen(num_nodes, 1);
+        }
+
         history.push_back({current});
+    }
 }
 
 MatrixX4dRB* Variable::estimate_grads() {
@@ -220,10 +248,18 @@ std::tuple<CudaDataMatrix, CudaDataMatrix> Variable::estimate_grads_cu() {
     }
 
     auto send_name = name + "current";
-    current_redist = CFDArcoGlobalInit::get_redistributed(current, send_name);
-    current_redist_cu = {};
-    for (const auto& elem : current_redist) {
-        current_redist_cu.push_back(CudaDataMatrix::from_eigen(elem));
+    if (CFDArcoGlobalInit::get_size() > 1) {
+        current_redist = CFDArcoGlobalInit::get_redistributed(current, send_name);
+        current_redist_cu = {};
+        for (const auto &elem: current_redist) {
+            current_redist_cu.push_back(CudaDataMatrix::from_eigen(elem));
+        }
+    } else {
+        current_redist_cu = {};
+        for (int i = 0; i < 4; ++i) {
+            current_redist_cu.emplace_back(num_nodes);
+        }
+        from_indices(current_cu, mesh->_n2_ids_cu, current_redist_cu, num_nodes);
     }
 
     auto grad_xd = CudaDataMatrix(current_cu._size, 0);
@@ -237,11 +273,28 @@ std::tuple<CudaDataMatrix, CudaDataMatrix> Variable::estimate_grads_cu() {
 
     send_name = name + "grad";
 
-    auto grads_cu = from_multiple_cols({grad_xd, grad_yd});
-    auto grads_redist = CFDArcoGlobalInit::get_redistributed(grads_cu.to_eigen(num_nodes, 2), send_name);
-    grad_redist_cu = {};
-    for (auto & grads_i_cu : grads_redist) {
-        grad_redist_cu.emplace_back(CudaDataMatrix::from_eigen(grads_i_cu.col(0).eval()), CudaDataMatrix::from_eigen(grads_i_cu.col(1).eval()));
+    if (CFDArcoGlobalInit::get_size() > 1) {
+        auto grads_cu = from_multiple_cols({grad_xd, grad_yd});
+        auto grads_redist = CFDArcoGlobalInit::get_redistributed(grads_cu.to_eigen(num_nodes, 2), send_name);
+        grad_redist_cu = {};
+        for (auto &grads_i_cu: grads_redist) {
+            grad_redist_cu.emplace_back(CudaDataMatrix::from_eigen(grads_i_cu.col(0).eval()),
+                                        CudaDataMatrix::from_eigen(grads_i_cu.col(1).eval()));
+        }
+    } else {
+        auto grad_redist_cu1 = std::vector<CudaDataMatrix>{};
+        auto grad_redist_cu2 = std::vector<CudaDataMatrix>{};
+        for (int i = 0; i < 4; ++i) {
+            grad_redist_cu1.emplace_back(num_nodes);
+            grad_redist_cu2.emplace_back(num_nodes);
+        }
+        from_indices(grad_xd, mesh->_n2_ids_cu, grad_redist_cu1, num_nodes);
+        from_indices(grad_yd, mesh->_n2_ids_cu, grad_redist_cu2, num_nodes);
+        grad_redist_cu = {};
+        for (int i=0; i < 4; ++i) {
+            grad_redist_cu.emplace_back(grad_redist_cu1.at(i),
+                                        grad_redist_cu2.at(i));
+        }
     }
     return estimate_grid_cache_cu;
 }
@@ -399,6 +452,10 @@ Eigen::VectorXd Variable::extract(Eigen::VectorXd &left_part, double dt) {
     return left_part;
 }
 
+CudaDataMatrix Variable::extract_cu(CudaDataMatrix &left_part, double dt) {
+    return left_part;
+}
+
 MatrixX4dRB Variable::evaluate() {
     if (!is_subvariable) {
         return current;
@@ -425,6 +482,15 @@ void Variable::set_current(Eigen::VectorXd &current_) {
     get_first_order_cache_valid = false;
     if (CFDArcoGlobalInit::cuda_enabled) {
         current_cu = CudaDataMatrix::from_eigen(current);
+    }
+}
+
+void Variable::set_current(CudaDataMatrix& current_, bool copy_to_host) {
+    estimate_grid_cache_valid = false;
+    get_first_order_cache_valid = false;
+    current_cu = current_;
+    if (copy_to_host) {
+        current = current_.to_eigen(num_nodes, 1);
     }
 }
 
@@ -582,18 +648,52 @@ double UpdatePolicies::CourantFriedrichsLewy(double CFL, std::vector<Eigen::Vect
     return dt;
 }
 
+double UpdatePolicies::CourantFriedrichsLewyCu(double CFL, std::vector<CudaDataMatrix> &space_vars, Mesh2D* mesh) {
+    auto u = space_vars.at(0);
+    auto v = space_vars.at(1);
+    auto p = space_vars.at(2);
+    auto rho = space_vars.at(3);
+    auto gamma = 5. / 3.;
+    double dl = std::min(mesh->_dx, mesh->_dy);
+    auto denom = cfl_cu(dl, gamma, p, rho, u, v);
+    auto dt = CFL * denom;
+
+    return dt;
+}
+
 DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd> &, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*> &space_vars_) : update_fn{update_fn_}, CFL{CFL_}, space_vars{space_vars_} {
     name = "dt";
     mesh = mesh_;
     _dt = 0;
 }
 
+DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd> &, Mesh2D* mesh)> update_fn_,
+       std::function<double(double, std::vector<CudaDataMatrix> &, Mesh2D* mesh)> update_fn_cu_, double CFL_,
+       std::vector<Variable*> &space_vars_) : update_fn{update_fn_}, update_fn_cu{update_fn_cu_}, CFL{CFL_}, space_vars{space_vars_} {
+    name = "dt";
+    mesh = mesh_;
+    _dt = 0;
+    has_update_fn_cu = true;
+}
+
+#include <iostream>
+
 void DT::update() {
-    std::vector<Eigen::VectorXd> redist{};
-    for (auto var : space_vars) {
-        redist.push_back(var->current);
+    double dt_c = 0.0;
+    if (has_update_fn_cu && CFDArcoGlobalInit::cuda_enabled) {
+        std::vector<CudaDataMatrix> redist{};
+        for (auto var : space_vars) {
+            redist.push_back(var->current_cu);
+        }
+        dt_c = update_fn_cu(CFL, redist, mesh);
+    } else {
+        std::vector<Eigen::VectorXd> redist{};
+        for (auto var : space_vars) {
+            redist.push_back(var->current);
+        }
+        dt_c = update_fn(CFL, redist, mesh);
     }
-    auto dt_c = update_fn(CFL, redist, mesh);
+
     MPI_Allreduce(&dt_c, &_dt, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 }
 
@@ -614,6 +714,11 @@ _DT::_DT(Variable *var_, int) {
 
 Eigen::VectorXd _DT::extract(Eigen::VectorXd& left_part, double dt) {
     return dt * left_part + var->current;
+}
+
+CudaDataMatrix _DT::extract_cu(CudaDataMatrix& left_part, double dt) {
+    auto res = mul_mtrx(left_part, dt) + var->current_cu;
+    return res;
 }
 
 void _DT::solve(Variable* equation, DT* dt) {
@@ -772,16 +877,17 @@ CudaDataMatrix _Stab::evaluate_cu() {
 }
 
 void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_var, DT *dt) {
-    Eigen::VectorXd current;
     if (CFDArcoGlobalInit::cuda_enabled) {
         auto current_cu = equation->evaluate_cu();
         sync_device();
-        current = current_cu.to_eigen(set_var->mesh->_num_nodes, 1);
+        auto extracted_cu = time_var->extract_cu(current_cu, dt->_dt);
+        set_var->set_current(extracted_cu, CFDArcoGlobalInit::get_size() > 1);
+
     } else {
-        current = equation->evaluate();
+        Eigen::VectorXd current = equation->evaluate();
+        auto extracted = time_var->extract(current, dt->_dt);
+        set_var->set_current(extracted);
     }
-    auto extracted = time_var->extract(current, dt->_dt);
-    set_var->set_current(extracted);
 }
 
 Equation::Equation(size_t timesteps_) : timesteps{timesteps_} {}
@@ -808,7 +914,11 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
         dt->update();
 
         for (auto var : all_vars) {
-            var->set_bound();
+            if (var->has_boundary_conditions_cu && CFDArcoGlobalInit::cuda_enabled) {
+                var->set_bound_cu();
+            } else {
+                var->set_bound();
+            }
         }
 
         t_val += dt->_dt;
@@ -816,12 +926,18 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
         for (auto& equation : equation_system) {
             auto left_part = std::get<0>(equation);
             auto& right_part = std::get<2>(equation);
-//            std::cout << "starting " << right_part.name << std::endl;
             left_part->solve(&right_part, dt);
         }
 
         for (auto var : all_vars) {
-            var->set_bound();
+            if (var->has_boundary_conditions_cu && CFDArcoGlobalInit::cuda_enabled) {
+                var->set_bound_cu();
+            } else {
+                if (CFDArcoGlobalInit::cuda_enabled) {
+                    var->current = var->current_cu.to_eigen(var->num_nodes, 1);
+                }
+                var->set_bound();
+            }
             var->add_history();
         }
 

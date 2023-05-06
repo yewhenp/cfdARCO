@@ -67,6 +67,7 @@ public:
 CudaDataMatrix add_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b);
 CudaDataMatrix sub_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b);
 CudaDataMatrix mul_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b);
+CudaDataMatrix mul_mtrx(const CudaDataMatrix& a, const double b);
 CudaDataMatrix div_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b);
 CudaDataMatrix neg_mtrx(const CudaDataMatrix& a);
 CudaDataMatrix rowwice_sum(const CudaDataMatrix& a, int rows, int cols);
@@ -97,6 +98,12 @@ void get_interface_vars_first_order_kern(
         CudaDataMatrix& ret_r_cu,
         CudaDataMatrix& ret_l_cu
 );
+void from_indices(const CudaDataMatrix& from_data,
+                  const CudaDataMatrix& index_data,
+                  std::vector<CudaDataMatrix>& to_data,
+                  int rows_idx);
+double cfl_cu(double dl, double gamma, const CudaDataMatrix& p, const CudaDataMatrix& rho, const CudaDataMatrix& u,
+              const CudaDataMatrix& v);
 
 inline CudaDataMatrix operator+(const CudaDataMatrix& obj_l, const CudaDataMatrix& obj_r) {
     return add_mtrx(obj_l, obj_r);
@@ -147,6 +154,7 @@ public:
 inline CudaDataMatrix add_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b) {throw std::runtime_error{"CUDA not available"};}
 inline CudaDataMatrix sub_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b) {throw std::runtime_error{"CUDA not available"};}
 inline CudaDataMatrix mul_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b) {throw std::runtime_error{"CUDA not available"};}
+inline CudaDataMatrix mul_mtrx(const CudaDataMatrix& a, const double b) {throw std::runtime_error{"CUDA not available"};}
 inline CudaDataMatrix div_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b) {throw std::runtime_error{"CUDA not available"};}
 inline CudaDataMatrix neg_mtrx(const CudaDataMatrix& a) {throw std::runtime_error{"CUDA not available"};}
 inline CudaDataMatrix rowwice_sum(const CudaDataMatrix& a, int rows, int cols) {throw std::runtime_error{"CUDA not available"};}
@@ -177,6 +185,10 @@ inline void get_interface_vars_first_order_kern(
         CudaDataMatrix& ret_r_cu,
         CudaDataMatrix& ret_l_cu
 ) {throw std::runtime_error{"CUDA not available"};}
+inline void from_indices(const CudaDataMatrix& from_data,
+                  const CudaDataMatrix& index_data,
+                  std::vector<CudaDataMatrix>& to_data,
+                  int rows_idx) {throw std::runtime_error{"CUDA not available"};}
 
 inline CudaDataMatrix operator+(const CudaDataMatrix& obj_l, const CudaDataMatrix& obj_r) {throw std::runtime_error{"CUDA not available"};}
 inline CudaDataMatrix operator-(const CudaDataMatrix& obj_l, const CudaDataMatrix& obj_r) {throw std::runtime_error{"CUDA not available"};}

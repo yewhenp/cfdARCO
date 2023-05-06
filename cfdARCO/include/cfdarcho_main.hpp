@@ -20,6 +20,7 @@ public:
     static std::vector<MatrixX4dRB> get_redistributed(const MatrixX4dRB& inst, const std::string& name);
     static MatrixX4dRB recombine(const MatrixX4dRB& inst, const std::string& name);
     static inline int get_rank() { return world_rank; }
+    static inline int get_size() { return world_size; }
     static void enable_cuda(Mesh2D* mesh, int cuda_ranks);
     static bool cuda_enabled;
     static bool skip_history;

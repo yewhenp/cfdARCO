@@ -121,6 +121,8 @@ public:
     CudaDataMatrix _vec_in_edge_neigh_direction_x_cu{};
     CudaDataMatrix _vec_in_edge_neigh_direction_y_cu{};
     CudaDataMatrix _n2_ids_cu{};
+    CudaDataMatrix _node_is_boundary_cu{};
+    CudaDataMatrix _node_is_boundary_reverce_cu{};
 
 };
 

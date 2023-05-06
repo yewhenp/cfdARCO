@@ -15,7 +15,7 @@ class DT;
 class _GradEstimated;
 
 using BoundaryFN = std::function<Eigen::VectorXd(Mesh2D* mesh, Eigen::VectorXd& arr)>;
-
+using BoundaryFNCU = std::function<CudaDataMatrix(Mesh2D* mesh, CudaDataMatrix& arr)>;
 
 struct Tup3 {
     MatrixX4dRB el1;
@@ -27,6 +27,7 @@ class Variable {
 public:
     Variable();
     Variable(Mesh2D* mesh_, Eigen::VectorXd& initial_, BoundaryFN boundary_conditions_, std::string name_="");
+    Variable(Mesh2D* mesh_, Eigen::VectorXd& initial_, BoundaryFN boundary_conditions_, BoundaryFNCU boundary_conditions_cu_, std::string name_="");
     Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<MatrixX4dRB(MatrixX4dRB&, MatrixX4dRB&)> op_, std::string& name_);
     Variable(const std::shared_ptr<Variable> left_operand_, const std::shared_ptr<Variable> right_operand_, std::function<CudaDataMatrix(CudaDataMatrix&, CudaDataMatrix&)> op_, std::string& name_);
     Variable(Mesh2D* mesh_, double value);
@@ -34,12 +35,13 @@ public:
 
     Variable(Variable&);
     Variable(const Variable&);
-    Variable(Variable&&) = delete;
-    Variable(const Variable&&) = delete;
+//    Variable(Variable&&) = delete;
+//    Variable(const Variable&&) = delete;
 
     virtual std::shared_ptr<Variable> clone() const;
 
     void set_bound();
+    void set_bound_cu();
     void add_history();
     MatrixX4dRB* estimate_grads();
     std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grads_cu();
@@ -49,9 +51,11 @@ public:
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_first_order_cu();
     std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_second_order();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
+    virtual CudaDataMatrix extract_cu(CudaDataMatrix& left_part, double dt);
     virtual MatrixX4dRB evaluate();
     virtual CudaDataMatrix evaluate_cu();
     void set_current(Eigen::VectorXd& current_);
+    void set_current(CudaDataMatrix& current_, bool copy_to_host);
     std::vector<Eigen::VectorXd> get_history();
     virtual void solve(Variable* equation, DT* dt);
 
@@ -68,8 +72,10 @@ public:
     std::vector<CudaDataMatrix> current_redist_cu;
     std::vector<std::tuple<CudaDataMatrix, CudaDataMatrix>> grad_redist_cu;
     BoundaryFN boundary_conditions;
+    BoundaryFNCU boundary_conditions_cu;
     std::vector<Eigen::VectorXd> history {};
     size_t num_nodes = 0;
+    bool has_boundary_conditions_cu = false;
     bool is_subvariable = false;
     bool is_constvar = false;
     bool is_basically_created = false;
@@ -122,21 +128,26 @@ public:
 class UpdatePolicies {
 public:
     static double CourantFriedrichsLewy(double CFL, std::vector<Eigen::VectorXd>& space_vars, Mesh2D* mesh);
+    static double CourantFriedrichsLewyCu(double CFL, std::vector<CudaDataMatrix>& space_vars, Mesh2D* mesh);
 };
 
 
 class DT : public Variable {
 public:
     DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd>&, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*>& space_vars_);
+    DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd>&, Mesh2D* mesh)> update_fn_,
+       std::function<double(double, std::vector<CudaDataMatrix>&, Mesh2D* mesh)>update_fn_cu_, double CFL_, std::vector<Variable*>& space_vars_);
     void update();
     MatrixX4dRB evaluate() override;
     CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::function<double(double, std::vector<Eigen::VectorXd>&, Mesh2D* mesh)> update_fn;
+    std::function<double(double, std::vector<CudaDataMatrix>&, Mesh2D* mesh)> update_fn_cu;
     std::vector<Variable*>& space_vars;
     double _dt = 0.0;
     double CFL = 0.0;
+    bool has_update_fn_cu = false;
 };
 
 class Variable2d : Variable {
@@ -155,6 +166,7 @@ public:
     _DT(Variable* var_, int);
 
     Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt) override;
+    CudaDataMatrix extract_cu(CudaDataMatrix& left_part, double dt) override;
     void solve(Variable* equation, DT* dt) override;
     std::shared_ptr<Variable> clone() const override;
 

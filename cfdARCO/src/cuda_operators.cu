@@ -1,6 +1,8 @@
 #include "cuda_operators.hpp"
 #include "decls.hpp"
-#include "Eigen/Dense"
+#include <thrust/pair.h>
+#include <thrust/device_vector.h>
+#include <thrust/extrema.h>
 
 #define BLOCK_SIZE 1024
 
@@ -59,6 +61,21 @@ CudaDataMatrix mul_mtrx(const CudaDataMatrix& a, const CudaDataMatrix& b) {
     CudaDataMatrix res {a._size};
     mul_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), b.data.get(), res.data.get(), a._size);
 //    cudaDeviceSynchronize();
+    return res;
+}
+
+__global__ void mul_mtrx_by_double_k(const double* a, double b, double* c, int n) {
+    auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n) {
+        c[idx] = a[idx] * b;
+    }
+}
+
+CudaDataMatrix mul_mtrx(const CudaDataMatrix& a, const double b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<double>(a._size) / static_cast<double>(blocksize));
+    CudaDataMatrix res {a._size};
+    mul_mtrx_by_double_k<<<nblocks, blocksize>>>(a.data.get(), b, res.data.get(), a._size);
     return res;
 }
 
@@ -401,6 +418,108 @@ void get_interface_vars_first_order_kern(
     );
 }
 
+
+__global__ void from_indices_k(
+        const double* from_data,
+        const double* index_data,
+        double* to_data1,
+        double* to_data2,
+        double* to_data3,
+        double* to_data4,
+        int rows_from,
+        int rows_idx
+        ) {
+    auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if(idx < rows_idx) {
+        int idx_from1 = index_data[idx*4 + 0];
+        int idx_from2 = index_data[idx*4 + 1];
+        int idx_from3 = index_data[idx*4 + 2];
+        int idx_from4 = index_data[idx*4 + 3];
+
+        to_data1[idx] = from_data[idx_from1];
+        to_data2[idx] = from_data[idx_from2];
+        to_data3[idx] = from_data[idx_from3];
+        to_data4[idx] = from_data[idx_from4];
+    }
+}
+
+void from_indices(const CudaDataMatrix& from_data,
+                  const CudaDataMatrix& index_data,
+                  std::vector<CudaDataMatrix>& to_data,
+                  int rows_idx) {
+    int rows_from = from_data._size;
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<double>(rows_idx) / static_cast<double>(blocksize));
+
+    from_indices_k<<<nblocks, blocksize>>>(
+            from_data.data.get(),
+            index_data.data.get(),
+            to_data.at(0).data.get(),
+            to_data.at(1).data.get(),
+            to_data.at(2).data.get(),
+            to_data.at(3).data.get(),
+            rows_from,
+            rows_idx
+            );
+}
+
+
+__device__ void warp_reduce_min(volatile double *sdata, unsigned int tid)
+{
+    sdata[tid] = min(sdata[tid],sdata[tid+32]);
+    sdata[tid] = min(sdata[tid],sdata[tid+16]);
+    sdata[tid] = min(sdata[tid],sdata[tid+8]);
+    sdata[tid] = min(sdata[tid],sdata[tid+4]);
+    sdata[tid] = min(sdata[tid],sdata[tid+2]);
+    sdata[tid] = min(sdata[tid],sdata[tid+1]);
+}
+
+
+__global__ void cfl_cu_k(
+        double dl, double gamma, double* p_in, double* rho_in, double* u_in, double* v_in, int rows, double* value_memory
+) {
+    auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+    extern __shared__ int sdata[];
+
+    if(idx < rows) {
+        auto p = p_in[idx];
+        auto rho = rho_in[idx];
+        auto u = u_in[idx];
+        auto v = v_in[idx];
+
+        auto p1 = sqrt((gamma * p) / rho);
+        auto p2 = sqrt(u*u + v*v);
+        auto result = dl * (1.0 / (p1 + p2));
+        value_memory[idx] = result;
+    }
+}
+
+double cfl_cu(double dl, double gamma, const CudaDataMatrix& p, const CudaDataMatrix& rho, const CudaDataMatrix& u,
+            const CudaDataMatrix& v) {
+    int rows = p._size;
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<double>(rows) / static_cast<double>(blocksize));
+
+    CudaDataMatrix memory_value{rows};
+
+    cfl_cu_k<<<nblocks, blocksize>>>(
+            dl,
+            gamma,
+            p.data.get(),
+            rho.data.get(),
+            u.data.get(),
+            v.data.get(),
+            rows,
+            memory_value.data.get()
+    );
+
+    sync_device();
+    thrust::device_ptr<double> ptr = thrust::device_pointer_cast<double>(memory_value.data.get());
+    auto min_ptr = thrust::min_element(ptr, ptr + rows);
+
+    return *min_ptr;
+}
 
 //__global__ void _Grad_k(
 //        double* current_redist_cu1,
