@@ -34,7 +34,7 @@ def plot_mesh(mesh_nodes, values):
         r = "{:02x}".format(int(rgb[0] * 255))
         g = "{:02x}".format(int(rgb[1] * 255))
         b = "{:02x}".format(int(rgb[2] * 255))
-        rect_template = f'set object polygon from {x1},{y1} to {x2},{y2} to {x3},{y3} to {x4},{y4} to {x1},{y1} fc rgb "#{r}{g}{b}" fillstyle solid 1.0 border lt -1'
+        rect_template = f'set object polygon from {x1},{y1} to {x2},{y2} to {x3},{y3} to {x4},{y4} to {x1},{y1} fc rgb "#{r}{g}{b}" '
         return rect_template
 
     all_polys = []
@@ -52,7 +52,7 @@ def plot_mesh(mesh_nodes, values):
 
 
 if __name__ == '__main__':
-    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/strange_mesh3.json") as filee:
+    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps_bak/strange_mesh2.json") as filee:
         mesh_json = json.load(filee)
 
     mesh = []

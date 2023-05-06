@@ -3,6 +3,7 @@
 
 
 #include <iostream>
+#include <memory>
 #include <indicators/progress_bar.hpp>
 #include "mesh2d.hpp"
 

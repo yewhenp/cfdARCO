@@ -2,6 +2,6 @@
 build/
 bin/
 lib/
-dumps/
+dumps*/
 vgcore.*
 scripts/*.gnuplot

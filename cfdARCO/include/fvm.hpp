@@ -16,6 +16,13 @@ class _GradEstimated;
 
 using BoundaryFN = std::function<Eigen::VectorXd(Mesh2D* mesh, Eigen::VectorXd& arr)>;
 
+
+struct Tup3 {
+    MatrixX4dRB el1;
+    MatrixX4dRB el2;
+    MatrixX4dRB el3;
+};
+
 class Variable {
 public:
     Variable();
@@ -34,11 +41,11 @@ public:
 
     void set_bound();
     void add_history();
-    MatrixX4dRB estimate_grads();
+    MatrixX4dRB* estimate_grads();
     std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grads_cu();
     _GradEstimated dx();
     _GradEstimated dy();
-    std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_first_order();
+    Tup3* get_interface_vars_first_order();
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_first_order_cu();
     std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_second_order();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
@@ -54,6 +61,9 @@ public:
     Eigen::VectorXd current;
     CudaDataMatrix current_cu;
     std::vector<MatrixX4dRB> current_redist;
+    MatrixX4dRB current_redist_mtrx;
+    MatrixX4dRB grad_redist_mtrx_x;
+    MatrixX4dRB grad_redist_mtrx_y;
     std::vector<MatrixX4dRB> grad_redist;
     std::vector<CudaDataMatrix> current_redist_cu;
     std::vector<std::tuple<CudaDataMatrix, CudaDataMatrix>> grad_redist_cu;
@@ -74,7 +84,7 @@ public:
     bool estimate_grid_cache_valid = false;
     bool get_first_order_cache_valid = false;
     MatrixX4dRB estimate_grid_cache;
-    std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_first_order_cache;
+    Tup3 get_first_order_cache;
 
     std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grid_cache_cu;
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_first_order_cache_cu;

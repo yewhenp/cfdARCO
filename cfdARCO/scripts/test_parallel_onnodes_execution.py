@@ -20,7 +20,7 @@ def run_one_run(num_proc: int, mesh_size: int, available_nodes, procs_per_node):
             i = 0
 
     time_microsecondss = []
-    for q in range(2):
+    for q in range(5):
         command = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-L", str(mesh_size), "-v", "--skip_history", "-d", "ln"]
         result = subprocess.run(command, capture_output=True, text=True)
         outs = result.stdout
@@ -31,9 +31,9 @@ def run_one_run(num_proc: int, mesh_size: int, available_nodes, procs_per_node):
         print(f"Iter {q} time = {time_microseconds}")
 
     time_microseconds = min(time_microsecondss)
-    print(f"Res(num_proc={num_proc}, mesh_size={mesh_size}) = {time_microseconds}")
+    print(f"Res(num_proc={num_proc}, mesh_size={mesh_size}): min = {time_microseconds}")
 
-    return time_microseconds
+    return time_microsecondss
 
 
 def generate_report(num_proc_from: int, num_proc_to: int, mesh_sizes, available_nodes, procs_per_node, output_file):
@@ -42,10 +42,11 @@ def generate_report(num_proc_from: int, num_proc_to: int, mesh_sizes, available_
     mesh_sizes_df = []
     for i in range(num_proc_from, num_proc_to+1):
         for mesh_size in mesh_sizes:
-            time_cur = run_one_run(i, mesh_size, available_nodes, procs_per_node)
-            num_proc.append(i)
-            mesh_sizes_df.append(mesh_size)
-            times_microseconds.append(time_cur)
+            times_cur = run_one_run(i, mesh_size, available_nodes, procs_per_node)
+            for time_cur in times_cur:
+                num_proc.append(i)
+                mesh_sizes_df.append(mesh_size)
+                times_microseconds.append(time_cur)
 
     df_dict = {'num_proc': num_proc, 'times_microseconds': times_microseconds, "mesh_sizes": mesh_sizes_df}
     df = pd.DataFrame(df_dict)
@@ -56,15 +57,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='cfdARCHO bench')
     parser.add_argument('-pf', '--num_proc_from', required=True, type=int)
     parser.add_argument('-pt', '--num_proc_to', required=True, type=int)
-    parser.add_argument('-mf', '--mesh_size_from', required=True, type=int)
-    parser.add_argument('-mt', '--mesh_size_to', required=True, type=int)
-    parser.add_argument('-ms', '--mesh_size_step', required=True, type=int)
-    parser.add_argument('-o', '--out_file', required=False, default="report_per_nodes.csv")
+    parser.add_argument('-mf', '--mesh_size_from', required=False, type=int)
+    parser.add_argument('-mt', '--mesh_size_to', required=False, type=int)
+    parser.add_argument('-ms', '--mesh_size_step', required=False, type=int)
+    parser.add_argument('-m', '--meshes', required=False, nargs='+', type=int)
+    parser.add_argument('-o', '--out_file', required=False, default="report_per_nodes_full.csv")
     parser.add_argument('-n', '--nodes', nargs='+', required=True, type=str)
     parser.add_argument('--procs_per_node', required=True, type=int, default=4)
 
     args = parser.parse_args()
 
-    mesh_sizes = range(args.mesh_size_from, args.mesh_size_to, args.mesh_size_step)
+    if args.meshes is None:
+        mesh_sizes = range(args.mesh_size_from, args.mesh_size_to, args.mesh_size_step)
+    else:
+        mesh_sizes = args.meshes
     generate_report(args.num_proc_from, args.num_proc_to, list(mesh_sizes), args.nodes, args.procs_per_node, args.out_file)
 

@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("report_per_nodes.csv")
+df = pd.read_csv("report_per_nodes_8_meshines_aws.csv")
 
 
 df["times_microseconds"] = df["times_microseconds"] / 1000000
