@@ -21,7 +21,7 @@ def run_one_run(num_proc: int, mesh_size: int, available_nodes, procs_per_node):
 
     time_microsecondss = []
     for q in range(5):
-        command = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-L", str(mesh_size), "-v", "--skip_history", "-d", "ln"]
+        command = ["mpirun", "--oversubscribe", "--host", ",".join(nodes_to_run), bin_file, "-L", str(mesh_size), "-v", "--skip_history", "-d", "ln", "-t", "100"]
         result = subprocess.run(command, capture_output=True, text=True)
         outs = result.stdout
 
