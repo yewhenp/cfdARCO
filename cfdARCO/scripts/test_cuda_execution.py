@@ -12,8 +12,7 @@ def run_one_run(mesh_size: int):
     time_microseconds_parallels = []
 
     for q in range(5):
-        command_cuda = ["mpirun", "-n", "2", bin_file, "--skip_history", "-L", str(mesh_size), "-d", "ln", "-t", "300", "-c"]
-        # command_cuda = [bin_file, "--skip_history", "-L", str(mesh_size), "-d", "ln", "-t", "300", "-c"]
+        command_cuda = [bin_file, "-L", str(mesh_size), "-d", "ln", "-t", "300", "-c"]
         result_cuda = subprocess.run(command_cuda, capture_output=True, text=True)
         outs_cuda = result_cuda.stdout
 
@@ -22,15 +21,17 @@ def run_one_run(mesh_size: int):
         time_microseconds_cudas.append(time_microseconds_cuda)
 
     for q in range(5):
-        command_parallel = ["mpirun", "-n", "8", bin_file, "--skip_history", "-L", str(mesh_size), "-d", "ln", "-t", "300"]
-        result_parallel = subprocess.run(command_parallel, capture_output=True, text=True)
-        outs_parallel = result_parallel.stdout
+        # command_parallel = ["mpirun", "-n", "8", bin_file, "--skip_history", "-L", str(mesh_size), "-d", "ln", "-t", "300"]
+        # result_parallel = subprocess.run(command_parallel, capture_output=True, text=True)
+        # outs_parallel = result_parallel.stdout
 
-        time_str_parallel = outs_parallel.split("\n")[-2].split(" ")[-1].split("[")[0]
-        time_microseconds_parallel = int(time_str_parallel)
-        time_microseconds_parallels.append(time_microseconds_parallel)
+        # time_str_parallel = outs_parallel.split("\n")[-2].split(" ")[-1].split("[")[0]
+        # time_microseconds_parallel = int(time_str_parallel)
+        # time_microseconds_parallels.append(time_microseconds_parallel)
+        time_microseconds_parallels.append(0)
 
-    print(f"Res(mesh_size={mesh_size}) = cuda - {min(time_microseconds_cudas)}  parallel - {min(time_microseconds_parallels)}")
+    # print(f"Res(mesh_size={mesh_size}) = cuda - {min(time_microseconds_cudas)}  parallel - {min(time_microseconds_parallels)}")
+    print(f"Res(mesh_size={mesh_size}) = cuda - {min(time_microseconds_cudas)}  parallel - ")
 
     return time_microseconds_cudas, time_microseconds_parallels
 
@@ -45,6 +46,7 @@ def generate_report(mesh_sizes, output_file="report_cuda.csv"):
             mesh_sizes_df.append(mesh_size)
             times_microseconds_cuda.append(time_cur_cuda)
             times_microseconds_parallel.append(time_cur_parallel)
+            print(time_cur_cuda, time_cur_parallel)
 
     df_dict = {"mesh_sizes": mesh_sizes_df, "times_microseconds_cuda": times_microseconds_cuda,
                "times_microseconds_parallel": times_microseconds_parallel}
@@ -58,7 +60,7 @@ if __name__ == '__main__':
     parser.add_argument('-mt', '--mesh_size_to', required=False, type=int)
     parser.add_argument('-ms', '--mesh_size_step', required=False, type=int)
     parser.add_argument('-m', '--meshes', required=False, nargs='+', type=int)
-    parser.add_argument('-o', '--out_file', required=False, default="report_cuda.csv")
+    parser.add_argument('-o', '--out_file', required=False, default="report_cuda_history.csv")
 
     args = parser.parse_args()
 
