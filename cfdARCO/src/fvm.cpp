@@ -307,56 +307,71 @@ _GradEstimated Variable::dy() {
     return _GradEstimated{this,  false, true};
 }
 
-//std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> Variable::get_interface_vars_second_order() {
-//    if (is_subvariable) {
-//        auto [left_eval1, left_eval2, left_eval3] = left_operand->get_interface_vars_second_order();
-//        auto [right_eval1, right_eval2, right_eval3] = right_operand->get_interface_vars_second_order();
-//
-//        return {op(left_eval1, right_eval1), op(left_eval2, right_eval2), op(left_eval3, right_eval3)};
-//    }
-//
-//    auto grads = estimate_grads();
-//    auto grads_self_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//    auto grads_self_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//    auto grads_neigh_x = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//    auto grads_neigh_y = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//    auto cur_self = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//    auto cur_neigh = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//
-//    auto ret_r = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//    auto ret_l = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
-//
-//    for (int j = 0; j < 4; ++j) {
-//        grads_self_x.col(j) = grads.col(0);
-//        grads_self_y.col(j) = grads.col(1);
-//        grads_neigh_x.col(j) = grad_redist[j].col(0);
-//        grads_neigh_y.col(j) = grad_redist[j].col(1);
-//        cur_self.col(j) = current;
-//        cur_neigh.col(j) = current_redist[j];
-//    }
-//
-//    auto grads_self_xd = grads_self_x.cwiseProduct(mesh->_vec_in_edge_direction_x);
-//    auto grads_self_yd = grads_self_y.cwiseProduct(mesh->_vec_in_edge_direction_y);
-//    auto grads_neigh_xd = grads_neigh_x.cwiseProduct(mesh->_vec_in_edge_neigh_direction_x);
-//    auto grads_neigh_yd = grads_neigh_y.cwiseProduct(mesh->_vec_in_edge_neigh_direction_y);
-//
-//    auto val_self = (grads_self_xd + grads_self_yd + cur_self).eval();
-//    auto val_neigh = (grads_neigh_xd + grads_neigh_yd + cur_neigh).eval();
-//
-//    auto ret_sum = (val_self + val_neigh) / 2;
-//
-//    ret_r.col(0) = val_neigh.col(0);
-//    ret_r.col(1) = val_self.col(1);
-//    ret_r.col(2) = val_self.col(2);
-//    ret_r.col(3) = val_neigh.col(3);
-//
-//    ret_l.col(0) = val_self.col(0);
-//    ret_l.col(1) = val_neigh.col(1);
-//    ret_l.col(2) = val_neigh.col(2);
-//    ret_l.col(3) = val_self.col(3);
-//
-//    return {ret_sum, ret_r, ret_l};
-//}
+Tup3* Variable::get_interface_vars_second_order() {
+    if (is_subvariable) {
+        auto var_l = left_operand->get_interface_vars_second_order();
+        auto var_r = right_operand->get_interface_vars_second_order();
+
+        get_second_order_cache = {op(var_l->el1, var_r->el1), op(var_l->el2, var_r->el2), op(var_l->el3, var_r->el3)};
+
+        return &get_second_order_cache;
+    }
+
+    if (get_second_order_cache_valid) {
+        return &get_second_order_cache;
+    }
+
+    auto grads = estimate_grads();
+
+    auto cur_self = current.replicate(1, 4);
+
+    auto ret_r = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+    auto ret_l = Eigen::Matrix<double, -1, 4> { num_nodes, 4};
+
+    auto ret_sum = (-cur_self + current_redist_mtrx) / 0.002;
+
+    ret_r.col(0) = current_redist_mtrx.col(0);
+    ret_r.col(1) = cur_self.col(1);
+    ret_r.col(2) = cur_self.col(2);
+    ret_r.col(3) = current_redist_mtrx.col(3);
+
+    ret_l.col(0) = cur_self.col(0);
+    ret_l.col(1) = current_redist_mtrx.col(1);
+    ret_l.col(2) = current_redist_mtrx.col(2);
+    ret_l.col(3) = cur_self.col(3);
+
+    get_second_order_cache = {ret_sum, ret_r, ret_l};
+    get_second_order_cache_valid = true;
+    return &get_second_order_cache;
+}
+
+std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> Variable::get_interface_vars_second_order_cu() {
+    if (is_subvariable) {
+        auto [left_eval1, left_eval2, left_eval3] = left_operand->get_interface_vars_second_order_cu();
+        auto [right_eval1, right_eval2, right_eval3] = right_operand->get_interface_vars_second_order_cu();
+
+        return {op_cu(left_eval1, right_eval1), op_cu(left_eval2, right_eval2), op_cu(left_eval3, right_eval3)};
+    }
+
+    if (get_second_order_cache_valid) {
+        return get_second_order_cache_cu;
+    }
+
+    auto grads = estimate_grads_cu();
+
+    auto grads_x = std::get<0>(grads);
+    auto grads_y = std::get<1>(grads);
+
+    CudaDataMatrix ret_r_cu{current_cu._size * 4};
+    CudaDataMatrix ret_l_cu{current_cu._size * 4};
+
+    auto cur_self = from_multiple_cols({current_cu, current_cu, current_cu, current_cu});
+    auto ret_sum_cu = (-cur_self + from_multiple_cols(current_redist_cu)) / CudaDataMatrix{current_cu._size * 4, 0.002};
+
+    get_second_order_cache_cu = {ret_sum_cu, ret_r_cu, ret_l_cu};
+    get_second_order_cache_valid = true;
+    return get_second_order_cache_cu;
+}
 
 Tup3* Variable::get_interface_vars_first_order() {
     if (is_subvariable) {
@@ -480,6 +495,7 @@ void Variable::set_current(Eigen::VectorXd &current_) {
     current = current_;
     estimate_grid_cache_valid = false;
     get_first_order_cache_valid = false;
+    get_second_order_cache_valid = false;
     if (CFDArcoGlobalInit::cuda_enabled) {
         current_cu = CudaDataMatrix::from_eigen(current);
     }
@@ -488,6 +504,7 @@ void Variable::set_current(Eigen::VectorXd &current_) {
 void Variable::set_current(CudaDataMatrix& current_, bool copy_to_host) {
     estimate_grid_cache_valid = false;
     get_first_order_cache_valid = false;
+    get_second_order_cache_valid = false;
     current_cu = current_;
     if (copy_to_host) {
         current = current_.to_eigen(num_nodes, 1);
@@ -776,60 +793,62 @@ _Grad2::_Grad2(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{
 }
 
 MatrixX4dRB _Grad2::evaluate() {
-    auto current_interface_gradients = var->get_interface_vars_first_order();
+    auto current_interface_gradients = var->get_interface_vars_second_order();
     auto& current_interface_gradients_star = current_interface_gradients->el1;
 
-    Eigen::VectorXd res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
-    Eigen::VectorXd res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
+    MatrixX4dRB scaler {1, 4};
+    scaler(0, 0) = -1;
+    scaler(0, 1) = 1;
+    scaler(0, 2) = 1;
+    scaler(0, 3) = -1;
+    MatrixX4dRB scaler_repl = scaler.replicate(var->num_nodes, 1);
+
+    if (clc_x && clc_y) {
+        auto res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x.cwiseProduct(scaler_repl))).rowwise().sum();
+        auto res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y.cwiseProduct(scaler_repl))).rowwise().sum();
+        return res_x + res_y;
+    }
 
     if (clc_x) {
+        auto scaled_norms = var->mesh->_normal_x.cwiseProduct(scaler_repl);
+        auto res_x = (current_interface_gradients_star.cwiseProduct(scaled_norms)).rowwise().sum();
         return res_x;
     }
     if (clc_y) {
+        auto scaled_norms = var->mesh->_normal_y.cwiseProduct(scaler_repl);
+        auto res_y = (current_interface_gradients_star.cwiseProduct(scaled_norms)).rowwise().sum();
         return res_y;
     }
     return MatrixX4dRB{};
-
-//    auto current_interface_gradients = var->get_interface_vars_first_order();
-//    auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
-//
-//    Eigen::VectorXd res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
-//    Eigen::VectorXd res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
-//
-//    if (clc_x) {
-//        auto varr = Variable(mesh, res_x, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
-//        return d1dx(varr).evaluate();
-//    }
-//    if (clc_y) {
-//        auto varr = Variable(mesh, res_y, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
-//        return d1dy(varr).evaluate();
-//    }
-//    return MatrixX4dRB{};
-
-//    auto current_interface_gradients = var->get_interface_vars_first_order();
-//    auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
-//
-//    Eigen::VectorXd res_x = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_x)).rowwise().sum();
-//    Eigen::VectorXd res_y = (current_interface_gradients_star.cwiseProduct(var->mesh->_normal_y)).rowwise().sum();
-//
-//    if (clc_x) {
-//        auto varr = Variable(mesh, res_x, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
-//        return varr.dx().evaluate();
-//    }
-//    if (clc_y) {
-//        auto varr = Variable(mesh, res_y, [](Mesh2D* mesh, Eigen::VectorXd& arr){ return arr; }, "tmp");
-//        return varr.dy().evaluate();
-//    }
-//    return MatrixX4dRB{};
-
-//if (clc_x) {
-//        return var->dx().evaluate();
-//    }
-//    if (clc_y) {
-//        return var->dy().evaluate();
-//    }
-//    return MatrixX4dRB{};
 }
+
+CudaDataMatrix _Grad2::evaluate_cu() {
+    auto current_interface_gradients = var->get_interface_vars_second_order_cu();
+    auto& current_interface_gradients_star = std::get<0>(current_interface_gradients);
+
+    MatrixX4dRB scaler {1, 4};
+    scaler(0, 0) = -1;
+    scaler(0, 1) = 1;
+    scaler(0, 2) = 1;
+    scaler(0, 3) = -1;
+    auto scaler_repl = CudaDataMatrix::from_eigen(scaler.replicate(var->num_nodes, 1));
+
+    if (clc_x && clc_y) {
+        auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu * scaler_repl, mesh->_num_nodes, 4);
+        auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu * scaler_repl, mesh->_num_nodes, 4);
+        return res_x + res_y;
+    }
+    if (clc_x) {
+        auto res_x = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_x_cu * scaler_repl, mesh->_num_nodes, 4);
+        return res_x;
+    }
+    if (clc_y) {
+        auto res_y = rowwice_sum(current_interface_gradients_star * var->mesh->_normal_y_cu * scaler_repl, mesh->_num_nodes, 4);
+        return res_y;
+    }
+    return CudaDataMatrix{};
+}
+
 
 _Stab::_Stab(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
     var = std::shared_ptr<Variable>{var_->clone()};
@@ -885,6 +904,7 @@ void EqSolver::solve_dt(Variable *equation, Variable *time_var, Variable *set_va
 
     } else {
         Eigen::VectorXd current = equation->evaluate();
+        auto other_var = to_grid_local(set_var->mesh, current);
         auto extracted = time_var->extract(current, dt->_dt);
         set_var->set_current(extracted);
     }

@@ -188,8 +188,8 @@ std::vector<MatrixX4dRB> CFDArcoGlobalInit::get_redistributed(const MatrixX4dRB&
     ret.reserve(4);
 //    for (int idx = 0; idx < mesh->_n2_ids.cols(); ++idx) {
     for (int idx = 0; idx < 4; ++idx) {
-        auto& id_s = mesh->_n2_ids_v[idx];
-        auto recomb = buff(id_s, Eigen::placeholders::all);
+//        auto& id_s = ;
+        auto recomb = buff(mesh->_n2_ids_v[idx], Eigen::placeholders::all);
         ret.push_back(recomb);
     }
 

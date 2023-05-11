@@ -49,7 +49,8 @@ public:
     _GradEstimated dy();
     Tup3* get_interface_vars_first_order();
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_first_order_cu();
-    std::tuple<MatrixX4dRB, MatrixX4dRB, MatrixX4dRB> get_interface_vars_second_order();
+    Tup3* get_interface_vars_second_order();
+    std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_second_order_cu();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
     virtual CudaDataMatrix extract_cu(CudaDataMatrix& left_part, double dt);
     virtual MatrixX4dRB evaluate();
@@ -89,11 +90,14 @@ public:
 //    cache
     bool estimate_grid_cache_valid = false;
     bool get_first_order_cache_valid = false;
+    bool get_second_order_cache_valid = false;
     MatrixX4dRB estimate_grid_cache;
     Tup3 get_first_order_cache;
+    Tup3 get_second_order_cache;
 
     std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grid_cache_cu;
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_first_order_cache_cu;
+    std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_second_order_cache_cu;
 
     Variable operator+(const Variable & obj_r) const;
     Variable operator-(const Variable & obj_r) const;
@@ -129,6 +133,13 @@ class UpdatePolicies {
 public:
     static double CourantFriedrichsLewy(double CFL, std::vector<Eigen::VectorXd>& space_vars, Mesh2D* mesh);
     static double CourantFriedrichsLewyCu(double CFL, std::vector<CudaDataMatrix>& space_vars, Mesh2D* mesh);
+
+    static inline double constant_dt(double CFL, std::vector<Eigen::VectorXd>& space_vars, Mesh2D* mesh) {
+        return CFL;
+    }
+    static inline double constant_dt_cu(double CFL, std::vector<CudaDataMatrix>& space_vars, Mesh2D* mesh) {
+        return CFL;
+    }
 };
 
 
@@ -192,6 +203,7 @@ public:
     _Grad2(Variable* var_, bool clc_x_=1, bool clc_y_=1);
 
     MatrixX4dRB evaluate() override;
+    CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
 
     std::shared_ptr<Variable> var;
@@ -254,8 +266,16 @@ inline auto d2dy(Variable& var) {
     return _Grad2(&var,  false, true);
 }
 
-inline auto d2dy2(Variable&& var) {
+inline auto d2dy(Variable&& var) {
     return _Grad2(&var,  false, true);
+}
+
+inline auto lapl(Variable& var) {
+    return _Grad2(&var, true, true);
+}
+
+inline auto lapl(Variable&& var) {
+    return _Grad2(&var, true, true);
 }
 
 inline auto stab_x(Variable& var) {
