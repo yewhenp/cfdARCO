@@ -27,6 +27,7 @@ plt.plot(df["mesh_sizes"], df["times_microseconds_cuda_memcopy"], label="CUDA wi
 ax.set_xlabel('Mesh size')
 ax.set_ylabel('Time, seconds')
 plt.legend()
+plt.savefig('cuda_vs_parallel_time.pdf')
 
 
 fig = plt.figure(figsize=(10,5))
@@ -36,6 +37,7 @@ plt.plot(df["mesh_sizes"], df["times_microseconds_parallel"] / df["times_microse
 ax.set_xlabel('Mesh size')
 ax.set_ylabel('Times')
 plt.legend()
+plt.savefig('cuda_vs_parallel_speedup.pdf')
 
 fig = plt.figure(figsize=(10,5))
 ax = fig.add_subplot(111)
@@ -44,12 +46,14 @@ plt.plot(df_std["mesh_sizes"], df_std["times_microseconds_cuda_memcopy"], label=
 ax.set_xlabel('Mesh size')
 ax.set_ylabel('Time, seconds')
 plt.legend()
+plt.savefig('cuda_std.pdf')
 
 fig = plt.figure(figsize=(10,5))
 ax = fig.add_subplot(111)
-plt.plot(df["mesh_sizes"], df["times_microseconds_cuda_memcopy"] / df["times_microseconds_cuda"], label="CUDA, STD")
+plt.plot(df["mesh_sizes"], df["times_microseconds_cuda_memcopy"] / df["times_microseconds_cuda"], label="Time CUDA without memcopy faster that with it")
 ax.set_xlabel('Mesh size')
-ax.set_ylabel('Time, seconds')
+ax.set_ylabel('Times')
 plt.legend()
+plt.savefig('cuda_memcopy_speedup.pdf')
 
 plt.show()

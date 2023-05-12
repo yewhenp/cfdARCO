@@ -5,10 +5,10 @@ import subprocess
 import json
 
 
-def plot_mesh(mesh_nodes, values):
+def plot_mesh(mesh_nodes, values, out_name):
     template = """
-    set terminal pngcairo size 400,400
-    set output "image-rectangles.png"
+    set terminal pdf
+    set output "{out_name}.pdf"
     
     set palette maxcolors 1024
     set style fill transparent solid 0.9 noborder
@@ -22,6 +22,7 @@ def plot_mesh(mesh_nodes, values):
     
     plot 0
     """
+    template = template.replace("{out_name}", out_name)
 
     cmap_name = "autumn_r"
     cmap = plt.get_cmap(cmap_name)
@@ -52,7 +53,7 @@ def plot_mesh(mesh_nodes, values):
 
 
 if __name__ == '__main__':
-    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps_bak/strange_mesh2.json") as filee:
+    with open("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps_bak/normal_mesh.json") as filee:
         mesh_json = json.load(filee)
 
     mesh = []
@@ -65,4 +66,4 @@ if __name__ == '__main__':
         mesh.append(node_repr)
         values.append(.5)
 
-    plot_mesh(mesh, values)
+    plot_mesh(mesh, values, "normal_mesh")
