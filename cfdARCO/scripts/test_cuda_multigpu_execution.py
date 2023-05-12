@@ -22,7 +22,7 @@ def run_one_run(mesh_size: int):
         print(f"Done single GPU, mesh = {mesh_size} time = {time_microseconds_single_gpu}")
 
     for q in range(5):
-        command_multi_gpu = ["mpirun", "-n", "1", bin_file, "--skip_history", "-L", str(mesh_size), "-d", "ln", "-t", "300", "-c"]
+        command_multi_gpu = ["mpirun", "-n", "2", bin_file, "--skip_history", "-L", str(mesh_size), "-d", "ln", "-t", "300", "-c", "--cuda_ranks", "2"]
         result_multi_gpu = subprocess.run(command_multi_gpu, capture_output=True, text=True)
         outs_multi_gpu = result_multi_gpu.stdout
 
@@ -46,7 +46,6 @@ def generate_report(mesh_sizes, output_file="report_cuda.csv"):
             mesh_sizes_df.append(mesh_size)
             time_microseconds_cuda_single_gpus.append(time_cur_cuda)
             time_microseconds_cuda_multi_gpus.append(time_cur_parallel)
-            print(time_cur_cuda, time_cur_parallel)
 
     df_dict = {"mesh_sizes": mesh_sizes_df, "time_microseconds_cuda_single_gpu": time_microseconds_cuda_single_gpus,
                "time_microseconds_cuda_multi_gpu": time_microseconds_cuda_multi_gpus}
