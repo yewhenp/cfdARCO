@@ -17,26 +17,11 @@ Eigen::VectorXd initial_rho(Mesh2D* mesh) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        if ((.65 > node->y() && node->y() > .35)) {
-            ret(i) = 2;
-        } else {
+        if ((node->y() > .5)) {
             ret(i) = 1;
+        } else {
+            ret(i) = 2;
         }
-        ++i;
-    }
-    return ret;
-}
-
-Eigen::VectorXd initial_u(Mesh2D* mesh) {
-    auto ret = Eigen::VectorXd{mesh->_num_nodes};
-    int i = 0;
-    for (auto& node : mesh->_nodes) {
-//        if ((.75 > node->y() && node->y() > .25) && node->x() < 0.1) {
-//            ret(i) = 0.5;
-//        } else {
-//            ret(i) = 0;
-//        }
-        ret(i) = 0.5;
         ++i;
     }
     return ret;
@@ -46,7 +31,36 @@ Eigen::VectorXd initial_v(Mesh2D* mesh) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
+//        if ((.75 > node->y() && node->y() > .25) && node->x() < 0.1) {
+//            ret(i) = 0.5;
+//        } else {
+//            ret(i) = 0;
+//        }
         ret(i) = 0;
+        ++i;
+    }
+    return ret;
+}
+
+Eigen::VectorXd initial_u(Mesh2D* mesh) {
+    auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    int i = 0;
+    for (auto& node : mesh->_nodes) {
+        ret(i) = 0.0025*(1-std::cos(4 * 3.14 * node->x()))*(1-std::cos(4 * 3.14 * node->y()/3));
+        ++i;
+    }
+    return ret;
+}
+
+Eigen::VectorXd initial_p(Mesh2D* mesh) {
+    auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    int i = 0;
+    for (auto& node : mesh->_nodes) {
+        if ((node->y() > .5)) {
+            ret(i) = 2.5 - 0.1 * 1 * (node->y() - 0.5);
+        } else {
+            ret(i) = 2.5 - 0.1 * 2 * (node->y() - 0.75);
+        }
         ++i;
     }
     return ret;
@@ -57,12 +71,17 @@ Eigen::VectorXd boundary_none(Mesh2D* mesh, Eigen::VectorXd& arr) {
 }
 
 Eigen::VectorXd _boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, const Eigen::VectorXd& copy_var) {
+    return arr;
+
+
     auto arr1 = arr.cwiseProduct(mesh->_node_is_boundary_reverce);
     auto copy_var1 = copy_var.cwiseProduct(mesh->_node_is_boundary);
     return arr1 + copy_var1;
 }
 
 CudaDataMatrix _boundary_copy_cu(Mesh2D* mesh, CudaDataMatrix& arr, const CudaDataMatrix& copy_var) {
+    return arr;
+
     auto arr1 = arr * mesh->_node_is_boundary_reverce_cu;
     auto copy_var1 = copy_var * mesh->_node_is_boundary_cu;
     return arr1 + copy_var1;
@@ -187,8 +206,7 @@ int main(int argc, char **argv) {
     auto v_initial = initial_v(mesh.get());
     auto v = Variable(mesh.get(), v_initial, boundary_copy(v_initial), boundary_copy_cu(v_initial), "v");
 
-    Eigen::VectorXd p_initial = Eigen::VectorXd{mesh->_num_nodes};
-    p_initial.setConstant(2.5);
+    Eigen::VectorXd p_initial = initial_p(mesh.get());
     auto p = Variable(mesh.get(), p_initial, boundary_copy(p_initial), boundary_copy_cu(p_initial), "p");
 
     Eigen::VectorXd mass_initial = rho.current.array() * mesh->_volumes.array();
@@ -207,6 +225,8 @@ int main(int argc, char **argv) {
     std::vector<Variable*> space_vars {&u, &v, &p, &rho};
     auto dt = DT(mesh.get(), UpdatePolicies::CourantFriedrichsLewy, UpdatePolicies::CourantFriedrichsLewyCu, CFL, space_vars);
 
+    double g = -0.1;
+
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
             {&rho,        '=', mass / mesh->_volumes},
             {&u,          '=', rho_u / rho / mesh->_volumes},
@@ -222,6 +242,9 @@ int main(int argc, char **argv) {
             {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - stab_tot(rho * u) * 2)},
             {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - stab_tot(rho * v) * 2)},
             {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - stab_tot(E) * 2)},
+
+            {&rho_e, '=', rho_e + dt / 2 * rho_v * g },
+            {&rho_v, '=', rho_v + dt / 2 * mass * g },
 
     };
 

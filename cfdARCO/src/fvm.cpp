@@ -159,6 +159,11 @@ std::shared_ptr<Variable> _DT::clone() const {
     return std::shared_ptr<Variable>{new_obj};
 }
 
+std::shared_ptr<Variable> _D2T::clone() const {
+    auto* new_obj = new _D2T(*this);
+    return std::shared_ptr<Variable>{new_obj};
+}
+
 std::shared_ptr<Variable> _Grad::clone() const {
     auto* new_obj = new _Grad(*this);
     return std::shared_ptr<Variable>{new_obj};
@@ -693,8 +698,6 @@ DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd> 
     has_update_fn_cu = true;
 }
 
-#include <iostream>
-
 void DT::update() {
     double dt_c = 0.0;
     if (has_update_fn_cu && CFDArcoGlobalInit::cuda_enabled) {
@@ -741,6 +744,32 @@ CudaDataMatrix _DT::extract_cu(CudaDataMatrix& left_part, double dt) {
 void _DT::solve(Variable* equation, DT* dt) {
     EqSolver::solve_dt(equation, this, var.get(), dt);
 }
+
+_D2T::_D2T(Variable *var_, int) {
+    var = std::shared_ptr<Variable> {var_, [](Variable *) {}};
+}
+
+Eigen::VectorXd _D2T::extract(Eigen::VectorXd& left_part, double dt) {
+    if (var->history.size() > 1) {
+        return dt * dt * left_part + 2 * var->current - var->history.at(var->history.size() - 2);
+    }
+    return dt * left_part + var->current;
+}
+
+CudaDataMatrix _D2T::extract_cu(CudaDataMatrix& left_part, double dt) {
+    if (var->history.size() > 1) {
+        auto res = mul_mtrx(left_part, dt * dt) + mul_mtrx(var->current_cu, 2) - CudaDataMatrix::from_eigen(var->history.at(var->history.size() - 2));
+        return res;
+    }
+
+    auto res = mul_mtrx(left_part, dt) + var->current_cu;
+    return res;
+}
+
+void _D2T::solve(Variable* equation, DT* dt) {
+    EqSolver::solve_dt(equation, this, var.get(), dt);
+}
+
 
 _Grad::_Grad(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
     var = std::shared_ptr<Variable>{var_->clone()};

@@ -14,8 +14,8 @@ def plot_mesh(mesh_nodes, values_in_history):
     # set output "cfd.gif"
 
     template = """
-    set terminal gif animate size 800,800
-    set output "cfd.gif"
+    set terminal pdf
+    set output "mesh_sim.pdf"
     
     set palette maxcolors 1024
     set style fill transparent solid 0.9 noborder
@@ -47,7 +47,7 @@ def plot_mesh(mesh_nodes, values_in_history):
         return rect_template
 
     all_history = []
-    for curr_values in tqdm.tqdm(values_in_history[:500:10]):
+    for curr_values in tqdm.tqdm([values_in_history[-1]]):
         all_polys = []
 
         i = 0

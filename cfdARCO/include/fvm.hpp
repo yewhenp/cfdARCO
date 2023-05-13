@@ -184,6 +184,18 @@ public:
     std::shared_ptr<Variable> var;
 };
 
+class _D2T : public Variable {
+public:
+    _D2T(Variable* var_, int);
+
+    Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt) override;
+    CudaDataMatrix extract_cu(CudaDataMatrix& left_part, double dt) override;
+    void solve(Variable* equation, DT* dt) override;
+    std::shared_ptr<Variable> clone() const override;
+
+    std::shared_ptr<Variable> var;
+};
+
 
 class _Grad : public Variable {
 public:
@@ -235,6 +247,18 @@ inline auto d1t(Variable& var) {
 inline auto d1t(Variable&& var) {
     auto varr = new _DT(&var, 0);
     varr->name = "d1t(" + var.name + ")";
+    return varr;
+}
+
+inline auto d2t(Variable& var) {
+    auto varr = new _D2T(&var, 0);
+    varr->name = "d2t(" + var.name + ")";
+    return varr;
+}
+
+inline auto d2t(Variable&& var) {
+    auto varr = new _D2T(&var, 0);
+    varr->name = "d2t(" + var.name + ")";
     return varr;
 }
 

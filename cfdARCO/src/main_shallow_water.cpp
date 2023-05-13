@@ -12,54 +12,21 @@
 #include "cfdarcho_main.hpp"
 #include "io_operators.hpp"
 
-
-Eigen::VectorXd initial_rho(Mesh2D* mesh) {
+Eigen::VectorXd initial_h(Mesh2D* mesh) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        if ((.65 > node->y() && node->y() > .35)) {
-            ret(i) = 2;
-        } else {
-            ret(i) = 1;
-        }
+        ret(i) = std::exp(-(node->x()*node->x() / (2*(0.05E+6 * 0.05E+6)) + node->y()*node->y()/(2*(0.05E+6 * 0.05E+6))));
         ++i;
     }
     return ret;
-}
-
-Eigen::VectorXd initial_u(Mesh2D* mesh) {
-    auto ret = Eigen::VectorXd{mesh->_num_nodes};
-    int i = 0;
-    for (auto& node : mesh->_nodes) {
-//        if ((.75 > node->y() && node->y() > .25) && node->x() < 0.1) {
-//            ret(i) = 0.5;
-//        } else {
-//            ret(i) = 0;
-//        }
-        ret(i) = 0.5;
-        ++i;
-    }
-    return ret;
-}
-
-Eigen::VectorXd initial_v(Mesh2D* mesh) {
-    auto ret = Eigen::VectorXd{mesh->_num_nodes};
-    int i = 0;
-    for (auto& node : mesh->_nodes) {
-        ret(i) = 0;
-        ++i;
-    }
-    return ret;
-}
-
-Eigen::VectorXd boundary_none(Mesh2D* mesh, Eigen::VectorXd& arr) {
-    return arr;
 }
 
 Eigen::VectorXd _boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, const Eigen::VectorXd& copy_var) {
-    auto arr1 = arr.cwiseProduct(mesh->_node_is_boundary_reverce);
-    auto copy_var1 = copy_var.cwiseProduct(mesh->_node_is_boundary);
-    return arr1 + copy_var1;
+//    auto arr1 = arr.cwiseProduct(mesh->_node_is_boundary_reverce);
+//    auto copy_var1 = copy_var.cwiseProduct(mesh->_node_is_boundary);
+//    return arr1 + copy_var1;
+    return arr;
 }
 
 CudaDataMatrix _boundary_copy_cu(Mesh2D* mesh, CudaDataMatrix& arr, const CudaDataMatrix& copy_var) {
@@ -79,23 +46,47 @@ auto boundary_copy_cu(const Eigen::VectorXd& copy_var) {
     return [cuda_copy_var] (Mesh2D* mesh, CudaDataMatrix& arr) { return _boundary_copy_cu(mesh, arr, cuda_copy_var); };
 }
 
-Eigen::VectorXd boundary_with_neumann_pressure(Mesh2D* mesh, Eigen::VectorXd& arr, Eigen::VectorXd& copy_var) {
+Eigen::VectorXd _boundary_neumann(Mesh2D* mesh, Eigen::VectorXd& arr, const Eigen::VectorXd& grad_var) {
     auto redist = CFDArcoGlobalInit::get_redistributed(arr, "boundary_with_neumann");
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
         if (node->is_boundary()) {
-            if (.1 > node->y()) {
-                ret(i) = 1;
-            } else {
-//                auto where_bound
+            int q = 0;
+            MatrixX4dRB is_bound{1, 4};
+            is_bound.setConstant(0.0);
+            MatrixX4dRB is_not_bound{1, 4};
+            is_not_bound.setConstant(1.0);
+
+            for (auto edge_id : node->_edges_id) {
+                auto edge = mesh->_edges.at(edge_id);
+                if (edge->is_boundary()) {
+                    is_bound(q) = 1.0;
+                    is_not_bound(q) = 0.0;
+                }
+                q++;
             }
+
+            auto grad_cur_val = grad_var(i);
+            auto nominator = 2*grad_cur_val*node->_volume;
+            for (int j = 0; j < 4; ++j) {
+                nominator = nominator + is_not_bound(j) * redist.at(j)(i) * mesh->_normal_y(i, j);
+            }
+
+            auto ghost_normals = mesh->_normal_y.block<1, 4>(i, 0).cwiseProduct(is_bound);
+            auto demon = mesh->_normal_y.row(i).sum() + ghost_normals.sum();
+            ret(i) = nominator / demon;
+
         } else {
             ret(i) = arr(i);
         }
         ++i;
     }
     return ret;
+}
+
+auto boundary_neumann(const Eigen::VectorXd& grad_var) {
+    return [grad_var] (Mesh2D* mesh, Eigen::VectorXd& arr) { return _boundary_neumann(mesh, arr, grad_var); };
 }
 
 int main(int argc, char **argv) {
@@ -146,8 +137,6 @@ int main(int argc, char **argv) {
     size_t L = program.get<int>("L");
     size_t timesteps = program.get<int>("timesteps");
     size_t cuda_enable = program.get<bool>("cuda_enable");
-    double CFL = 0.5;
-    double gamma = 5. / 3.;
 
     auto mesh = std::make_shared<Mesh2D>(L, L, 1, 1);
     if (program.get<std::string>("mesh") != "") {
@@ -178,90 +167,79 @@ int main(int argc, char **argv) {
         CFDArcoGlobalInit::enable_cuda(mesh.get(), program.get<int>("cuda_ranks"));
     }
 
-    auto rho_initial = initial_rho(mesh.get());
-    auto rho = Variable(mesh.get(), rho_initial, boundary_copy(rho_initial), boundary_copy_cu(rho_initial), "rho");
-
-    auto u_initial = initial_u(mesh.get());
+    Eigen::VectorXd u_initial = Eigen::VectorXd{mesh->_num_nodes};
+    u_initial.setConstant(0);
     auto u = Variable(mesh.get(), u_initial, boundary_copy(u_initial), boundary_copy_cu(u_initial), "u");
 
-    auto v_initial = initial_v(mesh.get());
+    Eigen::VectorXd v_initial = Eigen::VectorXd{mesh->_num_nodes};
+    v_initial.setConstant(0);
     auto v = Variable(mesh.get(), v_initial, boundary_copy(v_initial), boundary_copy_cu(v_initial), "v");
 
-    Eigen::VectorXd p_initial = Eigen::VectorXd{mesh->_num_nodes};
-    p_initial.setConstant(2.5);
-    auto p = Variable(mesh.get(), p_initial, boundary_copy(p_initial), boundary_copy_cu(p_initial), "p");
+    Eigen::VectorXd h_initial = initial_h(mesh.get());
+    auto h = Variable(mesh.get(), h_initial, boundary_copy(h_initial), boundary_copy_cu(h_initial), "h");
 
-    Eigen::VectorXd mass_initial = rho.current.array() * mesh->_volumes.array();
+    Eigen::VectorXd mass_initial = initial_h(mesh.get()) ;
     auto mass = Variable(mesh.get(), mass_initial, boundary_copy(mass_initial), boundary_copy_cu(mass_initial), "mass");
 
-    Eigen::VectorXd rho_u_initial = rho.current.array() * u.current.array() * mesh->_volumes.array();
-    auto rho_u = Variable(mesh.get(), rho_u_initial, boundary_copy(rho_u_initial), boundary_copy_cu(rho_u_initial), "rho_u");
+    Eigen::VectorXd hu_initial = h_initial * u_initial ;
+    auto hu = Variable(mesh.get(), hu_initial, boundary_copy(hu_initial), boundary_copy_cu(hu_initial), "hu");
 
-    Eigen::VectorXd rho_v_initial = rho.current.array() * v.current.array() * mesh->_volumes.array();
-    auto rho_v = Variable(mesh.get(), rho_v_initial, boundary_copy(rho_v_initial), boundary_copy_cu(rho_v_initial), "rho_v");
+    Eigen::VectorXd hv_initial = h_initial * v_initial ;
+    auto hv = Variable(mesh.get(), hv_initial, boundary_copy(hv_initial), boundary_copy_cu(hv_initial), "hv");
 
-    auto E = p / (gamma - 1) + 0.5 * rho * ((u * u) + (v * v));
-    Eigen::VectorXd E_initial = (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array() + v.current.array() * v.current.array())) * mesh->_volumes.array();
-    auto rho_e = Variable(mesh.get(), E_initial, boundary_copy(E_initial), boundary_copy_cu(E_initial), "rho_e");
+    std::vector<Variable*> space_vars {&u, &v, &h};
+    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.0001, space_vars);
 
-    std::vector<Variable*> space_vars {&u, &v, &p, &rho};
-    auto dt = DT(mesh.get(), UpdatePolicies::CourantFriedrichsLewy, UpdatePolicies::CourantFriedrichsLewyCu, CFL, space_vars);
+    double g = 9.81;
 
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
-            {&rho,        '=', mass / mesh->_volumes},
-            {&u,          '=', rho_u / rho / mesh->_volumes},
-            {&v,          '=', rho_v / rho / mesh->_volumes},
-            {&p,          '=', (rho_e / mesh->_volumes - 0.5 * rho * (u * u + v * v)) * (gamma - 1)},
+//            {&u, '=', hu / h / mesh->_volumes},
+//            {&v, '=', hv / h / mesh->_volumes},
+//            {d1t(h), '=', - (d1dx(h * u) + d1dy(h * v))},
+//            {d1t(hu), '=', - ( d1dx(h * u * u + 0.5 * g * h * h) + d1dy(h * u * v) )},
+//            {d1t(hv), '=', - ( d1dx(h * u * v) + d1dy(h * v * v + 0.5 * g * h * h) )},
 
-            {&rho,    '=', rho - 0.5 * dt * (u * rho.dx() + rho * u.dx() + v * rho.dy() + rho * v.dy())},
-            {&u,      '=', u - 0.5 * dt * (u * u.dx() + v * u.dy() + (1 / rho) * p.dx())},
-            {&v,      '=', v - 0.5 * dt * (u * v.dx() + v * v.dy() + (1 / rho) * p.dy())},
-            {&p,      '=', p - 0.5 * dt * (gamma * p * (u.dx() + v.dy()) + u * p.dx() + v * p.dy())},
+//            {d1t(u), '=', -g*d1dx(h)},
+//            {d1t(v), '=', -g*d1dy(h)},
+////            {d1t(h), '=', - (d1dx((h + 10)*u) + d1dy((h + 10)*v))},
+//            {d1t(h), '=', - 10*(d1dx(u) + d1dy(v))},
 
-            {d1t(mass),  '=', -((d1dx(rho * u) + d1dy(rho * v)) - stab_tot(rho) * 2)},
-            {d1t(rho_u), '=', -((d1dx(rho * u * u + p) + d1dy(rho * v * u)) - stab_tot(rho * u) * 2)},
-            {d1t(rho_v), '=', -((d1dx(rho * v * u) + d1dy(rho * v * v + p)) - stab_tot(rho * v) * 2)},
-            {d1t(rho_e), '=', -((d1dx((E + p) * u) + d1dy((E + p) * v)) - stab_tot(E) * 2)},
+            {&h, '=', mass },
+            {&u, '=', hu / h },
+            {&v, '=', hv / h },
 
+            {&h, '=', h - 0.5 * dt * (u*h.dx() + h*u.dx() + v*h.dy() + h*v.dy() )},
+            {&u, '=', u - 0.5 * dt * (u*u.dx() + v*u.dy())},
+            {&v, '=', v - 0.5 * dt * (u*v.dx() + v*v.dy())},
+
+            {d1t(mass), '=', - (d1dx(h*u) + d1dy(h*v))},
+            {d1t(hu), '=', - ( d1dx(h * u * u + 0.5 * g * h * h) + d1dy(h * u * v) ) },
+            {d1t(hv), '=', - ( d1dx(h * u * v) + d1dy(h * v * v + 0.5 * g * h * h) ) },
     };
 
     auto equation = Equation(timesteps);
 
-    std::vector<Variable*> all_vars {&rho, &u, &v, &p, &mass, &rho_u, &rho_v, &rho_e};
+    std::vector<Variable*> all_vars {&u, &v, &h, &mass, &hu, &hv};
 
-    if (program.get<bool>("store_stepping")) init_store_history_stepping({&rho}, mesh.get());
+    if (program.get<bool>("store_stepping")) init_store_history_stepping(all_vars, mesh.get());
 
     auto begin = std::chrono::steady_clock::now();
-    equation.evaluate(all_vars, equation_system, &dt, visualize, {&rho});
+    equation.evaluate(all_vars, equation_system, &dt, visualize, all_vars);
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
     if (program.get<bool>("store_last")) {
         if (cuda_enable) {
-            rho.current = rho.current_cu.to_eigen(mesh->_num_nodes, 1);
+            h.current = h.current_cu.to_eigen(mesh->_num_nodes, 1);
         }
-        rho.history = {rho.current, rho.current};
+        h.history = {h.current, h.current};
     }
 
     if (program.get<bool>("store")) {
         if (program.get<bool>("store_stepping")) {
             finalize_history_stepping();
         } else {
-            store_history({&rho}, mesh.get());
-        }
-    }
-
-    if (visualize && create_plot) {
-        auto fig = matplot::figure(true);
-        for (int i = 0; i < rho.history.size() - 1; ++i) {
-            if (i % 10 != 0) continue;
-            auto grid_hist = to_grid(mesh.get(), rho.history[i]);
-            if (CFDArcoGlobalInit::get_rank() == 0) {
-                auto vect = from_eigen_matrix<double>(grid_hist);
-                fig->current_axes()->image(vect);
-                fig->draw();
-                std::this_thread::sleep_for(std::chrono::milliseconds {100});
-            }
+            store_history({&h}, mesh.get());
         }
     }
 
