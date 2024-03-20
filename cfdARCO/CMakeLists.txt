@@ -43,11 +43,13 @@ set(CFDARCHO_BASE_SOURCES
         include/cuda_operators.hpp
         include/io_operators.hpp
         src/io_operators.cpp
+        src/utils.cpp
+        src/val_utils.cpp
         include/eigen_holder.hpp
         )
 
 set(CFDARCHO_SOURCES ${CFDARCHO_BASE_SOURCES}
-        src/main_wave.cpp
+        examples/wave_eq/elastic.cpp
         )
 
 set(CFDARCHO_INFERENCE_SOURCES ${CFDARCHO_BASE_SOURCES}

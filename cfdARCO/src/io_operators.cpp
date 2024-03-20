@@ -40,10 +40,9 @@ void store_history(const std::vector<Variable*>& vars_to_store, const Mesh2D* me
 
     if (CFDArcoGlobalInit::get_rank() == 0) {
         store_mesh(mesh, CFDArcoGlobalInit::store_dir);
-        auto store_dir_latest = store_path / "run_latest";
+        auto store_dir_latest = fs::absolute(store_path / "run_latest");
         fs::remove_all(store_dir_latest);
-        const auto copy_options = fs::copy_options::update_existing | fs::copy_options::recursive;
-        fs::copy(CFDArcoGlobalInit::store_dir, store_dir_latest, copy_options);
+        fs::create_symlink(fs::absolute(CFDArcoGlobalInit::store_dir), store_dir_latest);
 
     }
 }
@@ -65,10 +64,9 @@ void init_store_history_stepping(const std::vector<Variable*>& vars_to_store, co
 
 void finalize_history_stepping(const fs::path& store_path) {
     if (CFDArcoGlobalInit::get_rank() == 0) {
-        auto store_dir_latest = store_path / "run_latest";
+        auto store_dir_latest = fs::absolute(store_path / "run_latest");
         fs::remove_all(store_dir_latest);
-        const auto copy_options = fs::copy_options::update_existing | fs::copy_options::recursive;
-        fs::copy(CFDArcoGlobalInit::store_dir, store_dir_latest, copy_options);
+        fs::create_symlink(fs::absolute(CFDArcoGlobalInit::store_dir), store_dir_latest);
     }
 }
 
