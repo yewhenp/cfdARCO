@@ -80,6 +80,7 @@ public:
     bool is_subvariable = false;
     bool is_constvar = false;
     bool is_basically_created = false;
+    bool is_dt2 = false;
 
 //    from subvariable
     std::shared_ptr<Variable> left_operand = nullptr;

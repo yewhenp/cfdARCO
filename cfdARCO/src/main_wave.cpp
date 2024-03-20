@@ -36,14 +36,25 @@ Eigen::VectorXd boundary_T(Mesh2D* mesh, Eigen::VectorXd& arr) {
     int i = 0;
     for (auto& node : mesh->_nodes) {
 //        if (mesh->_edges.at(node->_edges_id.at(2))->is_boundary()) {
-        if (node->x() < 0.05 && node->y() > 0.4 && node->y() < 0.6) {
-            ret(i) = std::sin(static_cast<double>(ii) * 0.15) * 20;
+        if (node->x() < 0.01 && ((node->y() > 0.24 && node->y() < 0.26) || (node->y() > 0.74 && node->y() < 0.76))) {
+            ret(i) = std::sin(static_cast<double>(ii) * 0.01);
         } else {
             ret(i) = arr(i);
         }
         ++i;
     }
     return ret;
+}
+
+CudaDataMatrix boundary_T_cu(Mesh2D* mesh, CudaDataMatrix& arr) {
+    static int ii = 0;
+    ++ii;
+
+    CudaDataMatrix arr_n{arr};
+    arr_n.set(mesh->_x, mesh->_y, 0, mesh->_y * 0.25, std::sin(static_cast<double>(ii) * 0.01) * 10);
+    arr_n.set(mesh->_x, mesh->_y, 0, mesh->_y * 0.75, std::sin(static_cast<double>(ii) * 0.01) * 5);
+
+    return arr_n;
 }
 
 
@@ -192,7 +203,7 @@ int main(int argc, char **argv) {
     }
 
     Eigen::VectorXd T_initial = initial_T(mesh.get());
-    auto T = Variable(mesh.get(), T_initial, boundary_T, "T");
+    auto T = Variable(mesh.get(), T_initial, boundary_T, boundary_T_cu, "T");
 
     std::vector<Variable*> space_vars {&T};
     auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 1, space_vars);

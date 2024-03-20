@@ -47,7 +47,7 @@ set(CFDARCHO_BASE_SOURCES
         )
 
 set(CFDARCHO_SOURCES ${CFDARCHO_BASE_SOURCES}
-        src/main.cpp
+        src/main_wave.cpp
         )
 
 set(CFDARCHO_INFERENCE_SOURCES ${CFDARCHO_BASE_SOURCES}

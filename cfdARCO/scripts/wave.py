@@ -3,7 +3,6 @@ import os
 import time
 
 import tqdm
-import pygame
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import mpl_toolkits.mplot3d.axes3d as p3
@@ -11,17 +10,19 @@ import numpy as np
 
 
 def mesh_variable_to_grid(var_value, Lx, Ly):
-    grid = np.zeros((Lx, Ly), dtype=np.float64)
-    for idx, elem in enumerate(var_value):
-        x_coord = int(idx % Lx)
-        y_coord = int(idx / Lx)
-        grid[x_coord, y_coord] = elem
+    grid = np.asarray(var_value, dtype=np.float64)
+    grid = grid.reshape((Lx, Ly))
+    # grid = np.zeros((Lx, Ly), dtype=np.float64)
+    # for idx, elem in enumerate(var_value):
+    #     x_coord = int(idx % Lx)
+    #     y_coord = int(idx / Lx)
+    #     grid[x_coord, y_coord] = elem
     return grid
 
 
 def make_heatmap(T_history, Lx, Ly):
-    # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-    T_history = [T_history[-1]]
+
+    rr = 3
 
     if len(T_history) > 1:
         print("Animating")
@@ -31,7 +32,8 @@ def make_heatmap(T_history, Lx, Ly):
             print(i)
             data = T_history[i]
             ax.cla()
-            ax.plot_surface(X, Y, data,  vmax=100, vmin=-100)
+            ax.plot_surface(X, Y, data, vmax=rr, vmin=-rr, cmap='plasma')
+            ax.set_zlim(-rr, rr)
         anim = animation.FuncAnimation(fig, animate, frames=len(T_history), repeat=False, interval=1)
     else:
         fig, ax = plt.subplots()
@@ -68,16 +70,23 @@ def make_heatmap(T_history, Lx, Ly):
     #     time.sleep(0.1)
 
 
-def read_var(var_path, Lx, Ly):
+def read_var(var_path, Lx, Ly, use_last_only):
     var_history = []
     filepathes = []
+
     for filename in tqdm.tqdm(os.listdir(var_path)):
         f = os.path.join(var_path, filename)
         if os.path.isfile(f):
             filepathes.append(f)
 
-    for i in range(len(filepathes)):
-        var = np.fromfile(var_path + "/" + str(i) + ".bin", dtype="float64")
+    stepp = 20
+
+    if not use_last_only:
+        for i in tqdm.trange(len(filepathes[::stepp])):
+            var = np.fromfile(var_path + "/" + str(i * stepp) + ".bin", dtype="float64")
+            var_history.append(mesh_variable_to_grid(var, Lx, Ly))
+    else:
+        var = np.fromfile(var_path + "/" + str(len(filepathes) - 1) + ".bin", dtype="float64")
         var_history.append(mesh_variable_to_grid(var, Lx, Ly))
 
     return var_history
@@ -96,6 +105,9 @@ if __name__ == '__main__':
             node_repr.append(mesh_json["vertexes"][v_id])
         mesh.append(node_repr)
 
-    T_history = read_var(base_dir + "/T/", mesh_json["x"], mesh_json["y"])
+
+    use_last_only = 0
+
+    T_history = read_var(base_dir + "/T/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
     make_heatmap(T_history, mesh_json["x"], mesh_json["y"])

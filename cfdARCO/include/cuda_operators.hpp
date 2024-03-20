@@ -35,6 +35,13 @@ public:
         data = std::shared_ptr<double> (static_cast<double*>(ptr), CudaDeleter{size});
     }
 
+    CudaDataMatrix(const CudaDataMatrix& oth) {
+        _size = oth._size;
+        auto* ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(double));
+        data = std::shared_ptr<double> (static_cast<double*>(ptr), CudaDeleter{_size});
+        cudaMemcpy(data.get(), oth.data.get(), _size * sizeof(double), cudaMemcpyDefault);
+    }
+
     CudaDataMatrix(size_t size, double const_val): _size{size} {
         auto* ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(double));
         data = std::shared_ptr<double> (static_cast<double*>(ptr), CudaDeleter{size});
@@ -58,6 +65,11 @@ public:
         CudaDataMatrix ret {static_cast<size_t>(mtrx_size)};
         cudaMemcpy(ret.data.get(), mtrx.data(), mtrx_size * sizeof(double), cudaMemcpyHostToDevice);
         return ret;
+    }
+
+    void set(int rows, int cols, int x, int y, double val) {
+        const size_t idx = y * rows + x;
+        cudaMemcpy(data.get() + idx, &val, sizeof(double), cudaMemcpyHostToDevice);
     }
 
     size_t _size;

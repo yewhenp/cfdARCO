@@ -103,6 +103,7 @@ Variable::Variable(Variable &copy_var) {
     is_constvar = copy_var.is_constvar;
     op = copy_var.op;
     op_cu = copy_var.op_cu;
+    is_dt2 = copy_var.is_dt2;
     is_basically_created = false;
 
     if (copy_var.left_operand) {
@@ -127,6 +128,7 @@ Variable::Variable(const Variable &copy_var) {
     is_constvar = copy_var.is_constvar;
     op = copy_var.op;
     op_cu = copy_var.op_cu;
+    is_dt2 = copy_var.is_dt2;
     is_basically_created = false;
 
     if (copy_var.left_operand) {
@@ -195,13 +197,28 @@ void Variable::set_bound_cu() {
 }
 
 void Variable::add_history() {
-    if (!CFDArcoGlobalInit::skip_history) {
+    if (CFDArcoGlobalInit::skip_history && !is_dt2) {
+        return;
+    }
+
+    if (CFDArcoGlobalInit::skip_history && is_dt2) {
         if (CFDArcoGlobalInit::cuda_enabled) {
             current = current_cu.to_eigen(num_nodes, 1);
         }
-
         history.push_back({current});
+
+        if (history.size() > 3) {
+            history.erase(history.begin());
+        }
+
+        return;
     }
+
+    if (CFDArcoGlobalInit::cuda_enabled) {
+        current = current_cu.to_eigen(num_nodes, 1);
+    }
+    history.push_back({current});
+
 }
 
 MatrixX4dRB* Variable::estimate_grads() {
@@ -747,6 +764,7 @@ void _DT::solve(Variable* equation, DT* dt) {
 
 _D2T::_D2T(Variable *var_, int) {
     var = std::shared_ptr<Variable> {var_, [](Variable *) {}};
+    var->is_dt2 = true;
 }
 
 Eigen::VectorXd _D2T::extract(Eigen::VectorXd& left_part, double dt) {
