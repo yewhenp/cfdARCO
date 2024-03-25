@@ -47,9 +47,9 @@ public:
     std::tuple<CudaDataMatrix, CudaDataMatrix> estimate_grads_cu();
     _GradEstimated dx();
     _GradEstimated dy();
-    Tup3* get_interface_vars_first_order();
+    virtual Tup3* get_interface_vars_first_order();
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_first_order_cu();
-    Tup3* get_interface_vars_second_order();
+    virtual Tup3* get_interface_vars_second_order();
     std::tuple<CudaDataMatrix, CudaDataMatrix, CudaDataMatrix> get_interface_vars_second_order_cu();
     virtual Eigen::VectorXd extract(Eigen::VectorXd& left_part, double dt);
     virtual CudaDataMatrix extract_cu(CudaDataMatrix& left_part, double dt);
@@ -205,6 +205,7 @@ public:
     MatrixX4dRB evaluate() override;
     CudaDataMatrix evaluate_cu() override;
     std::shared_ptr<Variable> clone() const override;
+    Tup3* get_interface_vars_first_order() override;
 
     std::shared_ptr<Variable> var;
     bool clc_x;

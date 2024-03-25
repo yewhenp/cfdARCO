@@ -50,25 +50,30 @@ int main(int argc, char **argv) {
     auto timesteps = initializer.timesteps;
 
     auto initial_zero = initial_with_val(mesh.get(), 0);
-    auto p = Variable(mesh.get(), initial_zero, boundary_sine, boundary_sine_cu, "p");
+    auto p_x = Variable(mesh.get(), initial_zero, boundary_sine, boundary_sine_cu, "p_x");
+    auto p_y = Variable(mesh.get(), initial_zero, boundary_sine, boundary_sine_cu, "p_y");
+    auto v_x = Variable(mesh.get(), initial_zero, boundary_copy(initial_zero), boundary_copy_cu(initial_zero), "v_x");
+    auto v_y = Variable(mesh.get(), initial_zero, boundary_copy(initial_zero), boundary_copy_cu(initial_zero), "v_y");
 
-    std::vector<Variable*> space_vars {&p};
-    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.1, space_vars);
+    std::vector<Variable*> all_vars {&p_x, &p_y, &v_x, &v_y};
+    std::vector<Variable*> store_vars {&p_x, &p_y};
+    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.1, all_vars);
 
-    double tau = 0.3 * 0.3;
+    double kappa = 2.2 * 10e4;
+    double rho = 1;
 
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
-            {d2t(p), '=', tau * lapl(p)},
+            {d1t(v_x), '=', -1 / rho * (d1dx(p_x) + d1dx(p_y))},
+            {d1t(v_y), '=', -1 / rho * (d1dy(p_x) + d1dy(p_y))},
+            {d1t(p_x), '=', -kappa * d1dx(v_x)},
+            {d1t(p_y), '=', -kappa * d1dy(v_y)},
     };
 
     auto equation = Equation(timesteps);
-
-    std::vector<Variable*> all_vars {&p};
-
-    initializer.init_store(all_vars);
+    initializer.init_store(store_vars);
 
     auto begin = std::chrono::steady_clock::now();
-    equation.evaluate(all_vars, equation_system, &dt, initializer.visualize, {&p});
+    equation.evaluate(all_vars, equation_system, &dt, initializer.visualize, store_vars);
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 

@@ -49,7 +49,7 @@ set(CFDARCHO_BASE_SOURCES
         )
 
 set(CFDARCHO_SOURCES ${CFDARCHO_BASE_SOURCES}
-        examples/wave_eq/elastic.cpp
+        examples/wave_eq/elastic_second_order.cpp
         )
 
 set(CFDARCHO_INFERENCE_SOURCES ${CFDARCHO_BASE_SOURCES}

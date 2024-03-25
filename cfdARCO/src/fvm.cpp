@@ -197,14 +197,15 @@ void Variable::set_bound_cu() {
 }
 
 void Variable::add_history() {
+    if (CFDArcoGlobalInit::cuda_enabled && CFDArcoGlobalInit::skip_history && CFDArcoGlobalInit::store_stepping) {
+        current = current_cu.to_eigen(num_nodes, 1);
+    }
+
     if (CFDArcoGlobalInit::skip_history && !is_dt2) {
         return;
     }
 
     if (CFDArcoGlobalInit::skip_history && is_dt2) {
-        if (CFDArcoGlobalInit::cuda_enabled) {
-            current = current_cu.to_eigen(num_nodes, 1);
-        }
         history.push_back({current});
 
         if (history.size() > 3) {
@@ -214,9 +215,6 @@ void Variable::add_history() {
         return;
     }
 
-    if (CFDArcoGlobalInit::cuda_enabled) {
-        current = current_cu.to_eigen(num_nodes, 1);
-    }
     history.push_back({current});
 
 }
@@ -792,6 +790,8 @@ void _D2T::solve(Variable* equation, DT* dt) {
 _Grad::_Grad(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {
     var = std::shared_ptr<Variable>{var_->clone()};
     mesh = var_->mesh;
+    num_nodes = var->num_nodes;
+    name = "Grad(" + var->name + ")";
 }
 
 MatrixX4dRB _Grad::evaluate() {
@@ -832,6 +832,11 @@ CudaDataMatrix _Grad::evaluate_cu() {
         return res_y;
     }
     return CudaDataMatrix{};
+}
+
+Tup3* _Grad::get_interface_vars_first_order() {
+    current = var->evaluate();
+    return Variable::get_interface_vars_first_order();
 }
 
 _Grad2::_Grad2(Variable *var_, bool clc_x_, bool clc_y_) : clc_x{clc_x_}, clc_y{clc_y_} {

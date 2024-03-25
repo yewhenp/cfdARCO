@@ -22,18 +22,21 @@ def mesh_variable_to_grid(var_value, Lx, Ly):
 
 def make_heatmap(T_history, Lx, Ly):
 
-    rr = 3
+    rr = 0.1
 
     if len(T_history) > 1:
         print("Animating")
-        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        fig, ax = plt.subplots()
         X, Y = np.meshgrid(np.linspace(0, Lx, Lx), np.linspace(0, Ly, Ly))
         def animate(i):
             print(i)
             data = T_history[i]
             ax.cla()
-            ax.plot_surface(X, Y, data, vmax=rr, vmin=-rr, cmap='plasma')
-            ax.set_zlim(-rr, rr)
+            # ax.plot_surface(X, Y, data, vmax=rr, vmin=-rr, cmap='plasma')
+            ax.pcolormesh(X, Y, data, vmax=rr, vmin=-rr)
+            # ax.pcolormesh(X, Y, data, cmap='plasma')
+            # ax.set_zlim(-rr, rr)
         anim = animation.FuncAnimation(fig, animate, frames=len(T_history), repeat=False, interval=1)
     else:
         fig, ax = plt.subplots()
@@ -108,6 +111,20 @@ if __name__ == '__main__':
 
     use_last_only = 0
 
-    T_history = read_var(base_dir + "/T/", mesh_json["x"], mesh_json["y"], use_last_only)
+    # p_x = read_var(base_dir + "/p_x/", mesh_json["x"], mesh_json["y"], use_last_only)
+    # print(mesh_json.keys())
+    # make_heatmap(p_x, mesh_json["x"], mesh_json["y"])
+    #
+    #
+    # p_y = read_var(base_dir + "/p_y/", mesh_json["x"], mesh_json["y"], use_last_only)
+    # print(mesh_json.keys())
+    # make_heatmap(p_y, mesh_json["x"], mesh_json["y"])
+    #
+    # p = []
+    # for i in range(len(p_x)):
+    #     p.append(p_x[i] + p_y[i])
+    # make_heatmap(p, mesh_json["x"], mesh_json["y"])
+
+    T_history = read_var(base_dir + "/p/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
     make_heatmap(T_history, mesh_json["x"], mesh_json["y"])
