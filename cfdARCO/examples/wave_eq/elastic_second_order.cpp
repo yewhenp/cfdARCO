@@ -52,29 +52,29 @@ int main(int argc, char **argv) {
 
     auto initial_zero = initial_with_val(mesh.get(), 0);
 
-    auto v_x = Variable(mesh.get(), initial_zero, boundary_sine, "p");
-    auto v_y = Variable(mesh.get(), initial_zero, boundary_sine, "v_y");
-    auto tau_xx = Variable(mesh.get(), initial_zero, boundary_copy(initial_zero), boundary_copy_cu(initial_zero), "tau_xx");
-    auto tau_xy = Variable(mesh.get(), initial_zero, boundary_copy(initial_zero), boundary_copy_cu(initial_zero), "tau_xy");
-    auto tau_yy = Variable(mesh.get(), initial_zero, boundary_copy(initial_zero), boundary_copy_cu(initial_zero), "tau_yy");
+    auto u = Variable(mesh.get(), initial_zero, boundary_sine, "v_x");
+    auto w = Variable(mesh.get(), initial_zero, boundary_sine, "v_y");
 
     auto rho = 2650;
     auto lambda = 57.92;
     auto mu = 48.9;
 
-    double tau = 0.3 * 0.3;
+    double c_11 = lambda + 2 * mu;
+    double c_22 = lambda + 2 * mu;
+    double c_12 = lambda;
+    double c_66 = mu;
 
-//    std::vector<Variable*> all_vars {&v_x, &v_y, &tau_xx, &tau_xy, &tau_yy};
-    std::vector<Variable*> all_vars {&v_x};
+    std::vector<Variable*> all_vars {&u, &w};
     auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.5, all_vars);
 
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
-            {d2t(v_x), '=', tau * (d1dx(d1dx(v_x)) + d1dy(d1dy(v_x)))},
+            {d2t(u), '=', (d1dx(c_11*d1dx(u) + c_12*d1dy(w)) + d1dy(c_66 * d1dy(u) + c_66 * d1dx(w))) / rho},
+            {d2t(w), '=', (d1dy(c_22*d1dy(w) + c_12*d1dx(u)) + d1dx(c_66 * d1dy(u) + c_66 * d1dx(w))) / rho},
     };
 
     auto equation = Equation(timesteps);
 
-    auto store_vars = {&v_x};
+    auto store_vars = {&u, &w};
     initializer.init_store(store_vars);
 
     auto begin = std::chrono::steady_clock::now();

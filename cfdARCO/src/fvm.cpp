@@ -8,6 +8,7 @@
 
 #include <utility>
 #include <indicators/progress_bar.hpp>
+#include <unsupported/Eigen/MatrixFunctions>
 
 Variable::Variable(Mesh2D* mesh_, Eigen::VectorXd &initial_, BoundaryFN boundary_conditions_, std::string name_) :
         mesh{mesh_}, current{initial_}, boundary_conditions{std::move(boundary_conditions_)}, name{std::move(name_)} {
@@ -150,6 +151,10 @@ std::shared_ptr<Variable> Variable::clone() const {
 std::shared_ptr<Variable> _GradEstimated::clone() const {
     auto* new_obj = new _GradEstimated(*this);
     return std::shared_ptr<Variable>{new_obj};
+}
+
+std::shared_ptr<Variable> PointerVariable::clone() const {
+    return std::shared_ptr<Variable>{const_cast<PointerVariable*>(this), [](Variable *) {}};
 }
 
 std::shared_ptr<Variable> DT::clone() const {
@@ -636,6 +641,22 @@ Variable operator/(const Variable & obj_l, const double obj_r) {
     return obj_l / val_r;
 }
 
+Variable Variable::exp() const {
+    std::string name_ = "-(" + this->name + ")";
+    auto [l_p, r_p] = get_that_vars(this, *this);
+    if (CFDArcoGlobalInit::cuda_enabled)
+        throw std::runtime_error("Not implemented");
+    return {l_p, l_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return lft.exp();}, name_};
+}
+
+Variable exp(const Variable & obj) {
+    std::string name_ = "-(" + obj.name + ")";
+    auto [l_p, r_p] = get_that_vars(&obj, obj);
+    if (CFDArcoGlobalInit::cuda_enabled)
+        throw std::runtime_error("Not implemented");
+    return {l_p, l_p, [](MatrixX4dRB& lft, MatrixX4dRB& rht){return Eigen::exp(lft.array());}, name_};
+}
+
 _GradEstimated::_GradEstimated(Variable *var_, bool clc_x_, bool clc_y_) : var{var_}, clc_x{clc_x_}, clc_y{clc_y_} {
     mesh = var->mesh;
     name = "GradEstimated(" + var_->name + ")";
@@ -698,6 +719,21 @@ double UpdatePolicies::CourantFriedrichsLewyCu(double CFL, std::vector<CudaDataM
     return dt;
 }
 
+PointerVariable::PointerVariable(Mesh2D* mesh_, double* ptr) : _ptr{ptr} {
+    name = "PointerVariable";
+    mesh = mesh_;
+}
+
+MatrixX4dRB PointerVariable::evaluate() {
+    auto ret = Eigen::VectorXd{mesh->_num_nodes};
+    ret.setConstant(*_ptr);
+    return ret;
+}
+
+CudaDataMatrix PointerVariable::evaluate_cu() {
+    return CudaDataMatrix{mesh->_num_nodes, *_ptr};
+}
+
 DT::DT(Mesh2D* mesh_, std::function<double(double, std::vector<Eigen::VectorXd> &, Mesh2D* mesh)> update_fn_, double CFL_, std::vector<Variable*> &space_vars_) : update_fn{update_fn_}, CFL{CFL_}, space_vars{space_vars_} {
     name = "dt";
     mesh = mesh_;
@@ -730,6 +766,9 @@ void DT::update() {
     }
 
     MPI_Allreduce(&dt_c, &_dt, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+
+    _current_time_step_int++;
+    _current_time_dbl += _dt;
 }
 
 MatrixX4dRB DT::evaluate() {
@@ -967,7 +1006,6 @@ Equation::Equation(size_t timesteps_) : timesteps{timesteps_} {}
 void Equation::evaluate(std::vector<Variable*> &all_vars,
                         std::vector<std::tuple<Variable*, char, Variable>> &equation_system, DT* dt, bool visualize,
                         std::vector<Variable*> store_vars) {
-    double t_val = 0;
     indicators::ProgressBar bar{
             indicators::option::BarWidth{50},
             indicators::option::Start{"["},
@@ -992,8 +1030,6 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
                 var->set_bound();
             }
         }
-
-        t_val += dt->_dt;
 
         for (auto& equation : equation_system) {
             auto left_part = std::get<0>(equation);
@@ -1022,7 +1058,7 @@ void Equation::evaluate(std::vector<Variable*> &all_vars,
         if (CFDArcoGlobalInit::store_stepping) store_history_stepping(store_vars, store_vars.at(0)->mesh, t);
     }
 
-    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << "Time progress = " << t_val << std::endl;
+    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << "Time progress = " << dt->_current_time_dbl << std::endl;
 }
 
 MatrixX4dRB to_grid(const Mesh2D* mesh, Eigen::VectorXd& values_half) {

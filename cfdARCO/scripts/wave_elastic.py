@@ -34,7 +34,7 @@ def make_heatmap(T_history, Lx, Ly):
             data = T_history[i]
             ax.cla()
             # ax.plot_surface(X, Y, data, vmax=rr, vmin=-rr, cmap='plasma')
-            ax.pcolormesh(X, Y, data, vmax=rr, vmin=-rr)
+            ax.pcolormesh(X, Y, data)
             # ax.pcolormesh(X, Y, data, cmap='plasma')
             # ax.set_zlim(-rr, rr)
         anim = animation.FuncAnimation(fig, animate, frames=len(T_history), repeat=False, interval=1)

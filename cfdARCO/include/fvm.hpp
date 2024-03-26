@@ -105,6 +105,7 @@ public:
     Variable operator*(const Variable & obj_r) const;
     Variable operator/(const Variable & obj_r) const;
     Variable operator-() const;
+    Variable exp() const;
 };
 
 Variable operator+(const double obj_l, const Variable & obj_r);
@@ -115,6 +116,7 @@ Variable operator+(const Variable & obj_l, const double obj_r);
 Variable operator-(const Variable & obj_l, const double obj_r);
 Variable operator*(const Variable & obj_l, const double obj_r);
 Variable operator/(const Variable & obj_l, const double obj_r);
+Variable exp(const Variable & obj);
 
 class _GradEstimated : public Variable {
 public:
@@ -143,6 +145,16 @@ public:
     }
 };
 
+class PointerVariable : public Variable {
+public:
+    PointerVariable(Mesh2D* mesh_, double* ptr);
+    MatrixX4dRB evaluate() override;
+    CudaDataMatrix evaluate_cu() override;
+    std::shared_ptr<Variable> clone() const override;
+
+    double* _ptr = nullptr;
+};
+
 
 class DT : public Variable {
 public:
@@ -160,6 +172,9 @@ public:
     double _dt = 0.0;
     double CFL = 0.0;
     bool has_update_fn_cu = false;
+
+    size_t _current_time_step_int = 0;
+    double _current_time_dbl = 0.0;
 };
 
 class Variable2d : Variable {
