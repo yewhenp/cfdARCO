@@ -21,8 +21,12 @@ def mesh_variable_to_grid(var_value, Lx, Ly):
 
 
 def make_heatmap(T_history, Lx, Ly):
+    min_elem = 0
+    max_elem = 0
 
-    rr = 3
+    for el in T_history:
+        min_elem = min(min_elem, el.min())
+        max_elem = max(max_elem, el.max())
 
     if len(T_history) > 1:
         print("Animating")
@@ -33,7 +37,7 @@ def make_heatmap(T_history, Lx, Ly):
             print(i)
             data = T_history[i]
             ax.cla()
-            # ax.plot_surface(X, Y, data, vmax=rr, vmin=-rr, cmap='plasma')
+            # ax.pcolormesh(X, Y, data, vmax=max_elem * 0.7, vmin=min_elem)
             ax.pcolormesh(X, Y, data)
             # ax.pcolormesh(X, Y, data, cmap='plasma')
             # ax.set_zlim(-rr, rr)
@@ -111,10 +115,15 @@ if __name__ == '__main__':
 
     use_last_only = 0
 
-    T_history = read_var(base_dir + "/v_x/", mesh_json["x"], mesh_json["y"], use_last_only)
+    v_x = read_var(base_dir + "/v_x/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
-    make_heatmap(T_history, mesh_json["x"], mesh_json["y"])
+    make_heatmap(v_x, mesh_json["x"], mesh_json["y"])
 
-    T_history = read_var(base_dir + "/v_y/", mesh_json["x"], mesh_json["y"], use_last_only)
+    v_y = read_var(base_dir + "/v_y/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
-    make_heatmap(T_history, mesh_json["x"], mesh_json["y"])
+    make_heatmap(v_y, mesh_json["x"], mesh_json["y"])
+
+    v = []
+    for i in range(len(v_x)):
+        v.append(v_x[i] + v_y[i])
+    make_heatmap(v, mesh_json["x"], mesh_json["y"])

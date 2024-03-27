@@ -20,41 +20,35 @@ inline void sett(Eigen::VectorXd& v, int rows, int cols, int x, int y, double va
 }
 
 
-Eigen::VectorXd boundary_sine(Mesh2D* mesh, Eigen::VectorXd& arr) {
-    static int ii = 0;
-
-    ++ii;
-
-    Eigen::VectorXd ret{arr};
-    sett(ret, mesh->_x, mesh->_y, mesh->_x * 0.25, mesh->_y * 0.25, std::sin(static_cast<double>(ii) * 0.01) * 1000);
-    sett(ret, mesh->_x, mesh->_y, mesh->_x * 0.75, mesh->_y * 0.75, std::sin(static_cast<double>(ii) * 0.01) * 1000);
-
-    return ret;
-}
-
-CudaDataMatrix boundary_sine_cu(Mesh2D* mesh, CudaDataMatrix& arr) {
-    static int ii = 0;
-    ++ii;
-
-    CudaDataMatrix arr_n{arr};
-    arr_n.set(mesh->_x, mesh->_y, mesh->_x * 0.25, mesh->_y * 0.25, std::sin(static_cast<double>(ii) * 0.01) * 1000);
-    arr_n.set(mesh->_x, mesh->_y, mesh->_x * 0.75, mesh->_y * 0.75, std::sin(static_cast<double>(ii) * 0.01) * 1000);
-
-    return arr_n;
-}
-
-
-
 int main(int argc, char **argv) {
     SingleLibInitializer initializer{argc, argv};
     auto mesh = initializer.mesh;
     auto timesteps = initializer.timesteps;
 
-    auto rho = 2800;
+    auto rho = Eigen::VectorXd {mesh->_num_nodes};
+    rho.setConstant(2800);
+
+    auto v_p_ = Eigen::VectorXd {mesh->_num_nodes};
+    auto v_s_ = Eigen::VectorXd {mesh->_num_nodes};
+    for (int x = 0; x < mesh->_x; ++x) {
+        for (int y = 0; y < mesh->_y; ++y) {
+            if (y < mesh->_y / 2) {
+                v_p_[x * mesh->_y + y] = 3300;
+                v_s_[x * mesh->_y + y] = 1905.31;
+            } else {
+                v_p_[x * mesh->_y + y] = 2600;
+                v_s_[x * mesh->_y + y] = 1501.15;
+            }
+        }
+    }
+
+    auto v_p = Variable(mesh.get(), 3300);
+    v_p.current = v_p_;
+    auto v_s = Variable(mesh.get(), 3300);
+    v_s.current = v_s_;
+
     auto A = 10e7;
     auto f_0 = 200;
-    auto v_p = 3300;
-    auto v_s = 1905;
     auto mu = (v_s * v_s) * rho;
     auto lambda = (v_p * v_p) * rho - 2*mu;
 
@@ -69,16 +63,16 @@ int main(int argc, char **argv) {
     auto tau_yy = Variable(mesh.get(), initial_zero, boundary_copy(initial_zero), boundary_copy_cu(initial_zero), "tau_yy");
 
     std::vector<Variable*> all_vars {&v_x, &v_y, &tau_xx, &tau_xy, &tau_yy};
-    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.05, all_vars);
+    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.03, all_vars);
 
 
     auto central_point = Variable(mesh.get(), 0.0);
-    sett(central_point.current, mesh->_x, mesh->_y, mesh->_x * 0.25, mesh->_y * 0.25, 1.0);
-    sett(central_point.current, mesh->_x, mesh->_y, mesh->_x * 0.75, mesh->_y * 0.75, 1.0);
+    sett(central_point.current, mesh->_x, mesh->_y, mesh->_y * 0.5, mesh->_x * 0.4, 1.0);
     auto curr_time = PointerVariable(mesh.get(), &dt._current_time_dbl);
 
     auto a = 3.14 * 3.14 * f_0 * f_0;
-    auto s_base = -2 * A * a * curr_time * exp(-a * curr_time * curr_time);
+    auto time_shift = curr_time - (1.2 / f_0);
+    auto s_base = -2 * A * a * time_shift * exp(-a * time_shift * time_shift);
     auto s = s_base * central_point;
 
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
@@ -91,7 +85,7 @@ int main(int argc, char **argv) {
 
     auto equation = Equation(timesteps);
 
-    auto store_vars = {&v_x, &v_y, &tau_xx, &tau_xy, &tau_yy};
+    auto store_vars = {&v_x, &v_y};
     initializer.init_store(store_vars);
 
     auto begin = std::chrono::steady_clock::now();

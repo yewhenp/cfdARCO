@@ -79,7 +79,7 @@ public:
         store_last = program.get<bool>("store_last");
         store = program.get<bool>("store");
 
-        mesh = std::make_shared<Mesh2D>(L, L, 1, 1);
+        mesh = std::make_shared<Mesh2D>(L, L, 0.125, 0.125);
         if (!program.get<std::string>("mesh").empty()) {
             mesh = read_mesh(program.get<std::string>("mesh"));
         } else {
