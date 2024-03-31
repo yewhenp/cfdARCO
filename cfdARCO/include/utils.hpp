@@ -9,10 +9,22 @@ inline argparse::ArgumentParser parse_args_base(int argc, char **argv) {
     argparse::ArgumentParser program("cfdARCO");
     program.add_argument("-v", "--visualize").default_value(false).implicit_value(true);
     program.add_argument("--create_plot").default_value(false).implicit_value(true);
-    program.add_argument("-L")
+    program.add_argument("-Lx")
             .help("square size")
             .default_value(200)
             .scan<'i', int>();
+    program.add_argument("-Ly")
+            .help("square size")
+            .default_value(200)
+            .scan<'i', int>();
+    program.add_argument("-dx")
+            .help("square size")
+            .default_value(1.0)
+            .scan<'g', double>();
+    program.add_argument("-dy")
+            .help("square size")
+            .default_value(1.0)
+            .scan<'g', double>();
     program.add_argument("-t", "--timesteps")
             .help("timesteps")
             .default_value(1000)
@@ -53,7 +65,10 @@ class SingleLibInitializer{
 public:
     bool visualize;
     bool create_plot;
-    size_t L;
+    size_t Lx;
+    size_t Ly;
+    double dx;
+    double dy;
     int timesteps;
     bool cuda_enable;
     bool store_stepping;
@@ -72,14 +87,17 @@ public:
         visualize = program.get<bool>("visualize");
         create_plot = program.get<bool>("create_plot");
 
-        L = program.get<int>("L");
+        Lx = program.get<int>("Lx");
+        Ly = program.get<int>("Ly");
+        dx = program.get<double>("dx");
+        dy = program.get<double>("dy");
         timesteps = program.get<int>("timesteps");
         cuda_enable = program.get<bool>("cuda_enable");
         store_stepping = program.get<bool>("store_stepping");
         store_last = program.get<bool>("store_last");
         store = program.get<bool>("store");
 
-        mesh = std::make_shared<Mesh2D>(L, L, 0.125, 0.125);
+        mesh = std::make_shared<Mesh2D>(Lx, Ly, dx, dy);
         if (!program.get<std::string>("mesh").empty()) {
             mesh = read_mesh(program.get<std::string>("mesh"));
         } else {
@@ -136,6 +154,11 @@ public:
         CFDArcoGlobalInit::finalize();
     }
 };
+
+inline void sett(Eigen::VectorXd& v, int rows, int cols, int x, int y, double val) {
+    const size_t idx = x * rows + y;
+    v[idx] = val;
+}
 
 
 #endif //CFDARCO_UTILS_HPP

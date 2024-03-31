@@ -20,9 +20,30 @@ def mesh_variable_to_grid(var_value, Lx, Ly):
     return grid
 
 
-def make_heatmap(T_history, Lx, Ly):
+def make_heatmap(T_history, Lx, Ly, name):
+    min_elem = 0
+    max_elem = 0
+    pre_min_elem = 0
+    pre_max_elem = 0
 
-    rr = 0.1
+    # for el in T_history:
+    #     curr_min_elem = el.min()
+    #     curr_max_elem = el.max()
+    #     if curr_min_elem < min_elem:
+    #         pre_min_elem = min_elem
+    #         min_elem = curr_min_elem
+    #     if curr_max_elem > max_elem:
+    #         pre_max_elem = max_elem
+    #         max_elem = curr_max_elem
+
+    for el in T_history:
+        min_elem = min(min_elem, el.min())
+        max_elem = max(max_elem, el.max())
+
+    r_max = max_elem * 0.03
+    r_min = max_elem * -0.03
+    # r_max = 0.03
+    # r_min = -0.03
 
     if len(T_history) > 1:
         print("Animating")
@@ -34,10 +55,14 @@ def make_heatmap(T_history, Lx, Ly):
             data = T_history[i]
             ax.cla()
             # ax.plot_surface(X, Y, data, vmax=rr, vmin=-rr, cmap='plasma')
-            ax.pcolormesh(X, Y, data, vmax=rr, vmin=-rr)
-            # ax.pcolormesh(X, Y, data, cmap='plasma')
+            ax.pcolormesh(X, Y, data, vmax=r_max, vmin=r_min)
+            # ax.pcolormesh(X, Y, data)
             # ax.set_zlim(-rr, rr)
         anim = animation.FuncAnimation(fig, animate, frames=len(T_history), repeat=False, interval=1)
+        writer = animation.PillowWriter(fps=60,
+                                    metadata=dict(artist='Me'),
+                                    bitrate=1800)
+        anim.save(f'{name}.gif', writer=writer)
     else:
         fig, ax = plt.subplots()
         X, Y = np.meshgrid(np.linspace(0, Lx, Lx), np.linspace(0, Ly, Ly))
@@ -96,7 +121,7 @@ def read_var(var_path, Lx, Ly, use_last_only):
 
 
 if __name__ == '__main__':
-    base_dir = "/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/run_latest/"
+    base_dir = "../dumps/run_latest/"
 
     with open(base_dir + "/mesh.json") as filee:
         mesh_json = json.load(filee)
@@ -111,20 +136,20 @@ if __name__ == '__main__':
 
     use_last_only = 0
 
-    # p_x = read_var(base_dir + "/p_x/", mesh_json["x"], mesh_json["y"], use_last_only)
-    # print(mesh_json.keys())
-    # make_heatmap(p_x, mesh_json["x"], mesh_json["y"])
-    #
-    #
-    # p_y = read_var(base_dir + "/p_y/", mesh_json["x"], mesh_json["y"], use_last_only)
-    # print(mesh_json.keys())
-    # make_heatmap(p_y, mesh_json["x"], mesh_json["y"])
-    #
-    # p = []
-    # for i in range(len(p_x)):
-    #     p.append(p_x[i] + p_y[i])
-    # make_heatmap(p, mesh_json["x"], mesh_json["y"])
-
-    T_history = read_var(base_dir + "/p/", mesh_json["x"], mesh_json["y"], use_last_only)
+    p_x = read_var(base_dir + "/p_x/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
-    make_heatmap(T_history, mesh_json["x"], mesh_json["y"])
+    make_heatmap(p_x, mesh_json["x"], mesh_json["y"], "p_x")
+
+
+    p_y = read_var(base_dir + "/p_y/", mesh_json["x"], mesh_json["y"], use_last_only)
+    print(mesh_json.keys())
+    make_heatmap(p_y, mesh_json["x"], mesh_json["y"], "p_y")
+
+    p = []
+    for i in range(len(p_x)):
+        p.append(p_x[i] + p_y[i])
+    make_heatmap(p, mesh_json["x"], mesh_json["y"], "p_sum")
+
+    # T_history = read_var(base_dir + "/p/", mesh_json["x"], mesh_json["y"], use_last_only)
+    # print(mesh_json.keys())
+    # make_heatmap(T_history, mesh_json["x"], mesh_json["y"])

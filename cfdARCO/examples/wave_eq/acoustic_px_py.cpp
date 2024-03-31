@@ -14,13 +14,6 @@
 #include "utils.hpp"
 #include "val_utils.hpp"
 
-
-inline void sett(Eigen::VectorXd& v, int rows, int cols, int x, int y, double val) {
-    const size_t idx = x * rows + y;
-    v[idx] = val;
-}
-
-
 Eigen::VectorXd boundary_sine(Mesh2D* mesh, Eigen::VectorXd& arr) {
     static int ii = 0;
 

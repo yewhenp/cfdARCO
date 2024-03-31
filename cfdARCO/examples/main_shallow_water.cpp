@@ -11,238 +11,68 @@
 #include "fvm.hpp"
 #include "cfdarcho_main.hpp"
 #include "io_operators.hpp"
+#include "utils.hpp"
+#include "val_utils.hpp"
 
-Eigen::VectorXd initial_h(Mesh2D* mesh) {
+Eigen::VectorXd initial_h(Mesh2D* mesh, double H, double rossby_radius) {
     auto ret = Eigen::VectorXd{mesh->_num_nodes};
     int i = 0;
     for (auto& node : mesh->_nodes) {
-        ret(i) = std::exp(-(node->x()*node->x() / (2*(0.05E+6 * 0.05E+6)) + node->y()*node->y()/(2*(0.05E+6 * 0.05E+6))));
+        ret(i) = H + 1.0 * std::exp(
+                - std::pow(node->x() - mesh->_dx * mesh->_lx / 2, 2) / std::pow(rossby_radius, 2)
+                - std::pow(node->y() - mesh->_dy * mesh->_ly / 2, 2) / std::pow(rossby_radius, 2)
+                );
         ++i;
     }
     return ret;
-}
-
-Eigen::VectorXd _boundary_copy(Mesh2D* mesh, Eigen::VectorXd& arr, const Eigen::VectorXd& copy_var) {
-//    auto arr1 = arr.cwiseProduct(mesh->_node_is_boundary_reverce);
-//    auto copy_var1 = copy_var.cwiseProduct(mesh->_node_is_boundary);
-//    return arr1 + copy_var1;
-    return arr;
-}
-
-CudaDataMatrix _boundary_copy_cu(Mesh2D* mesh, CudaDataMatrix& arr, const CudaDataMatrix& copy_var) {
-    auto arr1 = arr * mesh->_node_is_boundary_reverce_cu;
-    auto copy_var1 = copy_var * mesh->_node_is_boundary_cu;
-    return arr1 + copy_var1;
-}
-
-auto boundary_copy(const Eigen::VectorXd& copy_var) {
-    return [copy_var] (Mesh2D* mesh, Eigen::VectorXd& arr) { return _boundary_copy(mesh, arr, copy_var); };
-}
-
-auto boundary_copy_cu(const Eigen::VectorXd& copy_var) {
-    CudaDataMatrix cuda_copy_var;
-    if (CFDArcoGlobalInit::cuda_enabled)
-        cuda_copy_var = CudaDataMatrix::from_eigen(copy_var);
-    return [cuda_copy_var] (Mesh2D* mesh, CudaDataMatrix& arr) { return _boundary_copy_cu(mesh, arr, cuda_copy_var); };
-}
-
-Eigen::VectorXd _boundary_neumann(Mesh2D* mesh, Eigen::VectorXd& arr, const Eigen::VectorXd& grad_var) {
-    auto redist = CFDArcoGlobalInit::get_redistributed(arr, "boundary_with_neumann");
-    auto ret = Eigen::VectorXd{mesh->_num_nodes};
-    int i = 0;
-    for (auto& node : mesh->_nodes) {
-        if (node->is_boundary()) {
-            int q = 0;
-            MatrixX4dRB is_bound{1, 4};
-            is_bound.setConstant(0.0);
-            MatrixX4dRB is_not_bound{1, 4};
-            is_not_bound.setConstant(1.0);
-
-            for (auto edge_id : node->_edges_id) {
-                auto edge = mesh->_edges.at(edge_id);
-                if (edge->is_boundary()) {
-                    is_bound(q) = 1.0;
-                    is_not_bound(q) = 0.0;
-                }
-                q++;
-            }
-
-            auto grad_cur_val = grad_var(i);
-            auto nominator = 2*grad_cur_val*node->_volume;
-            for (int j = 0; j < 4; ++j) {
-                nominator = nominator + is_not_bound(j) * redist.at(j)(i) * mesh->_normal_y(i, j);
-            }
-
-            auto ghost_normals = mesh->_normal_y.block<1, 4>(i, 0).cwiseProduct(is_bound);
-            auto demon = mesh->_normal_y.row(i).sum() + ghost_normals.sum();
-            ret(i) = nominator / demon;
-
-        } else {
-            ret(i) = arr(i);
-        }
-        ++i;
-    }
-    return ret;
-}
-
-auto boundary_neumann(const Eigen::VectorXd& grad_var) {
-    return [grad_var] (Mesh2D* mesh, Eigen::VectorXd& arr) { return _boundary_neumann(mesh, arr, grad_var); };
 }
 
 int main(int argc, char **argv) {
-    argparse::ArgumentParser program("cfdARCO");
-    program.add_argument("-v", "--visualize").default_value(false).implicit_value(true);
-    program.add_argument("--create_plot").default_value(false).implicit_value(true);
-    program.add_argument("-L")
-            .help("square size")
-            .default_value(200)
-            .scan<'i', int>();
-    program.add_argument("-t", "--timesteps")
-            .help("timesteps")
-            .default_value(1000)
-            .scan<'i', int>();
-    program.add_argument("-c", "--cuda_enable").default_value(false).implicit_value(true);
-    program.add_argument("--cuda_ranks")
-            .default_value(1)
-            .scan<'i', int>();
-    program.add_argument("-s", "--store").default_value(false).implicit_value(true);
-    program.add_argument("-st", "--store_stepping").default_value(false).implicit_value(true);
-    program.add_argument("-sl", "--store_last").default_value(false).implicit_value(true);
-    program.add_argument("--skip_history").default_value(false).implicit_value(true);
-    program.add_argument("-d", "--dist")
-            .default_value(std::string("cl"));
-    program.add_argument("-p", "--priorities")
-            .nargs(argparse::nargs_pattern::any)
-            .default_value(std::vector<size_t>{})
-            .scan<'i', size_t>();
-    program.add_argument("--strange_mesh").default_value(false).implicit_value(true);
-    program.add_argument("-m", "--mesh")
-            .default_value(std::string(""));
+    SingleLibInitializer initializer{argc, argv};
+    auto mesh = initializer.mesh;
+    auto timesteps = initializer.timesteps;
 
 
-    try {
-        program.parse_args(argc, argv);
-    }
-    catch (const std::runtime_error& err) {
-        std::cerr << err.what() << std::endl;
-        std::cerr << program;
-        std::exit(1);
-    }
-
-    CFDArcoGlobalInit::initialize(argc, argv, program.get<bool>("skip_history"));
-
-    bool visualize = program.get<bool>("visualize");
-    bool create_plot = program.get<bool>("create_plot");
-
-    size_t L = program.get<int>("L");
-    size_t timesteps = program.get<int>("timesteps");
-    size_t cuda_enable = program.get<bool>("cuda_enable");
-
-    auto mesh = std::make_shared<Mesh2D>(L, L, 1, 1);
-    if (program.get<std::string>("mesh") != "") {
-        mesh = read_mesh(program.get<std::string>("mesh"));
-    } else {
-        mesh->init_basic_internals();
-        if (program.get<bool>("strange_mesh")) {
-            mesh->make_strange_internals();
-        }
-        mesh->compute();
-    }
-
-    DistributionStrategy dist;
-    auto dist_str = program.get<std::string>("dist");
-    if (dist_str == "cl") {
-        dist = DistributionStrategy::Cluster;
-    } else if (dist_str == "ln") {
-        dist = DistributionStrategy::Linear;
-    } else {
-        std::cerr << "unknown dist strategy: " << dist_str << std::endl;
-        std::exit(1);
-    }
-
-    auto priorities = program.get<std::vector<size_t>>("priorities");
-    CFDArcoGlobalInit::make_node_distribution(mesh.get(), dist, priorities);
-
-    if (cuda_enable && CFDArcoGlobalInit::get_rank() < program.get<int>("cuda_ranks") ) {
-        CFDArcoGlobalInit::enable_cuda(mesh.get(), program.get<int>("cuda_ranks"));
-    }
+    double g = 9.81;
+    double f = 4e-4;
+    double H = 100;
+    double k = 0;
+    double rossby_radius = std::sqrt(g * H) / f;
 
     Eigen::VectorXd u_initial = Eigen::VectorXd{mesh->_num_nodes};
     u_initial.setConstant(0);
-    auto u = Variable(mesh.get(), u_initial, boundary_copy(u_initial), boundary_copy_cu(u_initial), "u");
+    auto u = Variable(mesh.get(), u_initial, boundary_copy(u_initial), boundary_copy_cu(u_initial), "u_shallow");
 
     Eigen::VectorXd v_initial = Eigen::VectorXd{mesh->_num_nodes};
     v_initial.setConstant(0);
-    auto v = Variable(mesh.get(), v_initial, boundary_copy(v_initial), boundary_copy_cu(v_initial), "v");
+    auto v = Variable(mesh.get(), v_initial, boundary_copy(v_initial), boundary_copy_cu(v_initial), "v_shallow");
 
-    Eigen::VectorXd h_initial = initial_h(mesh.get());
-    auto h = Variable(mesh.get(), h_initial, boundary_copy(h_initial), boundary_copy_cu(h_initial), "h");
-
-    Eigen::VectorXd mass_initial = initial_h(mesh.get()) ;
-    auto mass = Variable(mesh.get(), mass_initial, boundary_copy(mass_initial), boundary_copy_cu(mass_initial), "mass");
-
-    Eigen::VectorXd hu_initial = h_initial * u_initial ;
-    auto hu = Variable(mesh.get(), hu_initial, boundary_copy(hu_initial), boundary_copy_cu(hu_initial), "hu");
-
-    Eigen::VectorXd hv_initial = h_initial * v_initial ;
-    auto hv = Variable(mesh.get(), hv_initial, boundary_copy(hv_initial), boundary_copy_cu(hv_initial), "hv");
+    Eigen::VectorXd h_initial = initial_h(mesh.get(), H, rossby_radius);
+    auto h = Variable(mesh.get(), h_initial, boundary_none, boundary_none_cu, "h_shallow");
 
     std::vector<Variable*> space_vars {&u, &v, &h};
-    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.0001, space_vars);
+    double stable_dt = 0.5 * std::min(mesh->_lx * mesh->_dx, mesh->_ly * mesh->_dy) / std::sqrt(g * H);
+    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 2, space_vars);
 
-    double g = 9.81;
+
 
     std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
-//            {&u, '=', hu / h / mesh->_volumes},
-//            {&v, '=', hv / h / mesh->_volumes},
-//            {d1t(h), '=', - (d1dx(h * u) + d1dy(h * v))},
-//            {d1t(hu), '=', - ( d1dx(h * u * u + 0.5 * g * h * h) + d1dy(h * u * v) )},
-//            {d1t(hv), '=', - ( d1dx(h * u * v) + d1dy(h * v * v + 0.5 * g * h * h) )},
-
-//            {d1t(u), '=', -g*d1dx(h)},
-//            {d1t(v), '=', -g*d1dy(h)},
-////            {d1t(h), '=', - (d1dx((h + 10)*u) + d1dy((h + 10)*v))},
-//            {d1t(h), '=', - 10*(d1dx(u) + d1dy(v))},
-
-            {&h, '=', mass },
-            {&u, '=', hu / h },
-            {&v, '=', hv / h },
-
-            {&h, '=', h - 0.5 * dt * (u*h.dx() + h*u.dx() + v*h.dy() + h*v.dy() )},
-            {&u, '=', u - 0.5 * dt * (u*u.dx() + v*u.dy())},
-            {&v, '=', v - 0.5 * dt * (u*v.dx() + v*v.dy())},
-
-            {d1t(mass), '=', - (d1dx(h*u) + d1dy(h*v))},
-            {d1t(hu), '=', - ( d1dx(h * u * u + 0.5 * g * h * h) + d1dy(h * u * v) ) },
-            {d1t(hv), '=', - ( d1dx(h * u * v) + d1dy(h * v * v + 0.5 * g * h * h) ) },
+            {d1t(h), '=', - H * (d1dx(u) + d1dy(v))},
+            {d1t(u), '=', -g * d1dx(h) - k * u + f * v },
+            {d1t(v), '=', -g * d1dy(h) - k * v - f * u  },
     };
 
     auto equation = Equation(timesteps);
 
-    std::vector<Variable*> all_vars {&u, &v, &h, &mass, &hu, &hv};
+    std::vector<Variable*> all_vars {&u, &v, &h};
 
-    if (program.get<bool>("store_stepping")) init_store_history_stepping(all_vars, mesh.get());
+    initializer.init_store({&h});
 
     auto begin = std::chrono::steady_clock::now();
-    equation.evaluate(all_vars, equation_system, &dt, visualize, all_vars);
+    equation.evaluate(all_vars, equation_system, &dt, initializer.visualize, {&h});
     auto end = std::chrono::steady_clock::now();
     if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
 
-    if (program.get<bool>("store_last")) {
-        if (cuda_enable) {
-            h.current = h.current_cu.to_eigen(mesh->_num_nodes, 1);
-        }
-        h.history = {h.current, h.current};
-    }
-
-    if (program.get<bool>("store")) {
-        if (program.get<bool>("store_stepping")) {
-            finalize_history_stepping();
-        } else {
-            store_history({&h}, mesh.get());
-        }
-    }
-
-    CFDArcoGlobalInit::finalize();
+    initializer.finalize();
     return 0;
 }

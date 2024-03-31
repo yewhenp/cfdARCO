@@ -53,7 +53,7 @@ def read_var(var_path, Lx, Ly):
 
 
 if __name__ == '__main__':
-    base_dir = "/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/run_latest/"
+    base_dir = "../dumps/run_latest/"
 
     with open(base_dir + "/mesh.json") as filee:
         mesh_json = json.load(filee)

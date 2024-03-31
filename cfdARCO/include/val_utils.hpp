@@ -36,5 +36,12 @@ inline auto boundary_neumann(const Eigen::VectorXd& grad_var) {
     return [grad_var] (Mesh2D* mesh, Eigen::VectorXd& arr) { return _boundary_neumann(mesh, arr, grad_var); };
 }
 
+inline Eigen::VectorXd boundary_none(Mesh2D* mesh, Eigen::VectorXd& arr) {
+    return arr;
+}
+
+inline CudaDataMatrix boundary_none_cu(Mesh2D* mesh, CudaDataMatrix& arr) {
+    return arr;
+}
 
 #endif //CFDARCO_VAL_UTILS_HPP

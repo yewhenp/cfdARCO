@@ -20,7 +20,7 @@ def mesh_variable_to_grid(var_value, Lx, Ly):
     return grid
 
 
-def make_heatmap(T_history, Lx, Ly):
+def make_heatmap(T_history, Lx, Ly, name):
     min_elem = 0
     max_elem = 0
 
@@ -37,11 +37,15 @@ def make_heatmap(T_history, Lx, Ly):
             print(i)
             data = T_history[i]
             ax.cla()
-            # ax.pcolormesh(X, Y, data, vmax=max_elem * 0.7, vmin=min_elem)
-            ax.pcolormesh(X, Y, data)
+            ax.pcolormesh(X, Y, data, vmax=max_elem*0.2, vmin=-max_elem*0.2)
+            # ax.pcolormesh(X, Y, data)
             # ax.pcolormesh(X, Y, data, cmap='plasma')
             # ax.set_zlim(-rr, rr)
         anim = animation.FuncAnimation(fig, animate, frames=len(T_history), repeat=False, interval=1)
+        writer = animation.PillowWriter(fps=60,
+                                        metadata=dict(artist='Me'),
+                                        bitrate=1800)
+        anim.save(f'{name}.gif', writer=writer)
     else:
         fig, ax = plt.subplots()
         X, Y = np.meshgrid(np.linspace(0, Lx, Lx), np.linspace(0, Ly, Ly))
@@ -86,7 +90,7 @@ def read_var(var_path, Lx, Ly, use_last_only):
         if os.path.isfile(f):
             filepathes.append(f)
 
-    stepp = 20
+    stepp = 1
 
     if not use_last_only:
         for i in tqdm.trange(len(filepathes[::stepp])):
@@ -100,7 +104,7 @@ def read_var(var_path, Lx, Ly, use_last_only):
 
 
 if __name__ == '__main__':
-    base_dir = "/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/run_latest/"
+    base_dir = "../dumps/run_latest/"
 
     with open(base_dir + "/mesh.json") as filee:
         mesh_json = json.load(filee)
@@ -117,13 +121,13 @@ if __name__ == '__main__':
 
     v_x = read_var(base_dir + "/v_x/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
-    make_heatmap(v_x, mesh_json["x"], mesh_json["y"])
+    make_heatmap(v_x, mesh_json["x"], mesh_json["y"], "elastic_v_x")
 
     v_y = read_var(base_dir + "/v_y/", mesh_json["x"], mesh_json["y"], use_last_only)
     print(mesh_json.keys())
-    make_heatmap(v_y, mesh_json["x"], mesh_json["y"])
+    make_heatmap(v_y, mesh_json["x"], mesh_json["y"], "elastic_v_y")
 
     v = []
     for i in range(len(v_x)):
         v.append(v_x[i] + v_y[i])
-    make_heatmap(v, mesh_json["x"], mesh_json["y"])
+    make_heatmap(v, mesh_json["x"], mesh_json["y"], "elastic_v")

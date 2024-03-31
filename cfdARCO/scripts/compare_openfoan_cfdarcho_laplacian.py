@@ -60,8 +60,8 @@ def percent_error(predictions, targets):
 
 
 if __name__ == '__main__':
-    base_dir_cfdarco = "/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/run_latest/"
-    base_dir_openfoam = "/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/T"
+    base_dir_cfdarco = "../dumps/run_latest/"
+    base_dir_openfoam = "../dumps/T"
 
     with open(base_dir_cfdarco + "/mesh.json") as filee:
         mesh_json = json.load(filee)

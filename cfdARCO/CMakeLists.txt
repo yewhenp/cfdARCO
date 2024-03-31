@@ -49,7 +49,7 @@ set(CFDARCHO_BASE_SOURCES
         )
 
 set(CFDARCHO_SOURCES ${CFDARCHO_BASE_SOURCES}
-        examples/wave_eq/elastic.cpp
+        examples/main_shallow_water.cpp
         )
 
 set(CFDARCHO_INFERENCE_SOURCES ${CFDARCHO_BASE_SOURCES}

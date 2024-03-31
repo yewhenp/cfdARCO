@@ -33,7 +33,7 @@ def read_var(var_path, Lx, Ly):
 
 
 if __name__ == '__main__':
-    T_path = "/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/T"
+    T_path = "../dumps/T"
 
     Lx = 100
     Ly = 100

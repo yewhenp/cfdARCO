@@ -53,5 +53,5 @@ if __name__ == '__main__':
     x = 20
     y = 20
 
-    u_history, v_history = read_var("/home/yevhen/Documents/cfdARCO/cfdARCO/dumps/U", x, y)
+    u_history, v_history = read_var("../dumps/U", x, y)
     make_streamplot(u_history, v_history, x, y)
